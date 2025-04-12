@@ -8,11 +8,11 @@ import {
     Provider,
   } from '@nestjs/common';
   import { ModuleRef } from '@nestjs/core';
-  import { IBusTransitModuleOptions } from './interfaces/bustransit-options.interface';
 import { BUSTRANSIT_MODULE_OPTIONS } from './bustransit.constants';
-import { BusTransitService } from './bustransit.service';
+// import { BusTransitService } from './bustransit.service';
 import { BusTransitModuleOptions_Factory } from './factories/bustransit-options';
 import amqp from 'amqplib'
+import {BusTransitService} from "@core/bustransit/bustransit.service";
   
 @Global()
 @Module({

@@ -1,0 +1,1 @@
+interface IRabbitMqQueueConfigurator extends IRabbitMqExchangeConfigurator {}

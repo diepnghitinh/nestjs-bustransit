@@ -1,9 +1,6 @@
-import {
-    BusTransitBrokerBaseFactory,
-} from "@core/bustransit/factories/bustransit-broker.base";
-import {Logger} from "@nestjs/common";
 import * as amqp from 'amqplib';
-import {IBusTransitBrokerOptions} from "@core/bustransit/interfaces/bustransit-options.interface";
+import {IBusTransitBrokerOptions} from "@core/bustransit/interfaces/brokers/bustransit-broker.options.interface";
+import {BusTransitBrokerBaseFactory} from "@core/bustransit/factories/brokers/bustransit-broker.base";
 
 export class BusTransitBrokerRabbitMqFactory extends BusTransitBrokerBaseFactory
 {

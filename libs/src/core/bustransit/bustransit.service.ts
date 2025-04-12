@@ -1,7 +1,7 @@
 import {Injectable, Inject, Logger} from '@nestjs/common';
 import { BUSTRANSIT_MODULE_OPTIONS } from './bustransit.constants';
-import {IBusTransitBrokerOptions, IBusTransitModuleOptions} from './interfaces/bustransit-options.interface';
-import {BusTransitBrokerFactory} from "@core/bustransit/factories/bustransit-broker";
+import {IBusTransitBrokerOptions} from "@core/bustransit/interfaces/brokers/bustransit-broker.options.interface";
+import {BusTransitBrokerFactory} from "@core/bustransit/factories/brokers/bustransit-broker";
 
 @Injectable()
 export class BusTransitService {

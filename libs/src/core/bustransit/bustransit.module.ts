@@ -1,47 +1,45 @@
 import { DynamicModule, Logger, Module } from '@nestjs/common';
 import { BusTransitCoreModule } from './bustransit.core';
-import { BusTransitModuleOptionsRabbitMq_Factory } from './factories/bustransit-options';
-import { BusTransitAdapterRabbitMqConfig } from './factories/bustransit-adapter.rabbitmq.config';
+import {BusTransitConsumer} from "@core/bustransit/factories/consumer";
+import {IAddBusTransit} from "@core/bustransit/interfaces/bustransit";
+import {RabbitMqBusFactoryConfigurator} from "@core/bustransit/factories/rabbitmq-bus-factory.configurator";
 
 export namespace BusTransit {
 
-    export interface IAddBusTransit {
-        UsingRabbitMq(optionsFunc: BusTransitModuleOptionsRabbitMq_Factory);
-        AddConsumer<T>(): void;
-    }
-
-    type AddBusTransitFunction = (x: IAddBusTransit) => void;
-
     @Module({})
-    export class AddBusTransit {
+    export class AddBusTransit implements IAddBusTransit {
 
-        private _busTransitAdapterRabbitMqConfig: BusTransitAdapterRabbitMqConfig;
+        private _rabbitMqBusFactoryConfigurator: RabbitMqBusFactoryConfigurator;
+        private _consumers = {};
 
-        static Setup(optionsFunc: AddBusTransitFunction): DynamicModule {
+        static Setup(configure: (x: IAddBusTransit) => void): DynamicModule {
             const _instance = new AddBusTransit();
-            optionsFunc(_instance)
+            configure(_instance)
 
             return {
                 module: BusTransit.AddBusTransit,
-                imports: [BusTransitCoreModule.forRoot(_instance._busTransitAdapterRabbitMqConfig.getOptions())],
+                imports: [BusTransitCoreModule.forRoot(_instance._rabbitMqBusFactoryConfigurator)],
                 exports: [],
             };
         }
 
-        UsingRabbitMq(optionsFunc: BusTransitModuleOptionsRabbitMq_Factory) {
-            Logger.debug('RabbitMQ Host Configured');
-            this._busTransitAdapterRabbitMqConfig = new BusTransitAdapterRabbitMqConfig();
-            optionsFunc(this, this._busTransitAdapterRabbitMqConfig)
+        UsingRabbitMq(configure: (ctx, x: IRabbitMqBusFactoryConfigurator) => void) {
+            Logger.debug('** RabbitMQ Host Configured');
+            this._rabbitMqBusFactoryConfigurator = new RabbitMqBusFactoryConfigurator();
+            configure(this, this._rabbitMqBusFactoryConfigurator)
+            this.start();
         }
 
-        AddConsumer<T = any>() : void {
-            Logger.debug('AddConsumer')
-            // return {
-            //     module: BusTransit.AddBusTransit,
-            //     imports: [],
-            //     exports: [],
-            // };
+        AddConsumer<T extends BusTransitConsumer<any>>(consumerClass: new (...args: any[]) => T): void {
+            Logger.debug(`** Added Consumer [${consumerClass.name}]`)
+            const consumerInstance = new consumerClass;
+            this._consumers[consumerClass.name] = consumerInstance;
             return null;
+        }
+
+        start() {
+            Logger.debug('start')
+            Logger.debug(this._rabbitMqBusFactoryConfigurator.getOptions());
         }
     }
 }

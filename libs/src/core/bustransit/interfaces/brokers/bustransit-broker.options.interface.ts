@@ -1,5 +1,3 @@
-import { IBusTransitAdapterConfig } from "./bustransit-adapter.interface";
-
 export interface IBusTransitModuleOptions {
 }
 
