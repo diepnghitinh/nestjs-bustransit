@@ -9,6 +9,7 @@ export class RabbitMqBusFactoryConfigurator implements IRabbitMqBusFactoryConfig
     private prefetchCount: number = 50;
     private durable: boolean = true;
     private options: IBusTransitBrokerOptions = {
+        brokerName: '',
         brokerType: '',
         brokerInfo: {
             host: '',
@@ -19,11 +20,15 @@ export class RabbitMqBusFactoryConfigurator implements IRabbitMqBusFactoryConfig
         }
     }
 
+    public setName(name) {
+        this.options.brokerName = name;
+    }
+
     public Host(host: string, vhost: string, h: (h: IRabbitmqHostSettings) => void): any {
-        Logger.debug(host);
         const rabbitmqHostSettings = new RabbitmqHostSettings();
         h(rabbitmqHostSettings);
         this.options = {
+            ...this.options,
             brokerType: BrokerEnum.RABBITMQ,
             brokerInfo: {
                 host: host,

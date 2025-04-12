@@ -2,26 +2,21 @@ import {BusTransit} from '@core/bustransit';
 import { Global, Logger, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import '@configs/messaging.config';
-import {IBusTransitConsumer} from "@core/bustransit/interfaces/_consumer";
+import {SubmitOrderConsumer} from "@infrastructure/messaging/consumers/SubmitOrderConsumer";
 
 const configService = new ConfigService();
-
-class Message {}
-//
-// export class SubmitOrderConsumer implements IBusTransitConsumer<Message> {
-//     Consume(context){
-//         Logger.debug('SubmitOrderConsumer running')
-//     }
-// }
 
 @Global()
 @Module({
     imports: [
         BusTransit.AddBusTransit.Setup((x) => {
-            //x.AddConsumer(SubmitOrderConsumer);
+
+            x.AddConsumer(SubmitOrderConsumer);
 
             x.UsingRabbitMq((context, cfg) =>
             {
+                cfg.setName(configService.get('APP_NAME'));
+
                 cfg.PrefetchCount = 50;
                 cfg.Durable = true;
 
@@ -33,13 +28,7 @@ class Message {}
 
                 cfg.ReceiveEndpoint("regular-orders", e => {
 
-                    // e.ConfigureConsumer<SubmitOrderConsumer>(context, c => {
-                    //     // c.UseMessageRetry(r => r.Interval(5, 1000))
-                    //     Logger.debug('asas')
-                    // })
-
-                    e.ConfigureConsumer(context, c => {
-                        Logger.debug('ConfigureConsumer')
+                    e.ConfigureConsumer<SubmitOrderConsumer>(context, c => {
                         c.UseMessageRetry();
                     });
 

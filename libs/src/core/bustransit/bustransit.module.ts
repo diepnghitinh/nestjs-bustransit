@@ -16,9 +16,14 @@ export namespace BusTransit {
             const _instance = new AddBusTransit();
             configure(_instance)
 
+            Logger.debug('Setup finish')
+
             return {
                 module: BusTransit.AddBusTransit,
-                imports: [BusTransitCoreModule.forRoot(_instance._rabbitMqBusFactoryConfigurator)],
+                imports: [BusTransitCoreModule.forRoot(
+                    _instance._rabbitMqBusFactoryConfigurator.getOptions(),
+                    _instance.consumers,
+                )],
                 exports: [],
             };
         }
@@ -38,8 +43,12 @@ export namespace BusTransit {
         }
 
         start() {
-            Logger.debug('start')
+            Logger.debug('BusTransit start')
             Logger.debug(this._rabbitMqBusFactoryConfigurator.getOptions());
+        }
+
+        get consumers() {
+            return this._consumers;
         }
     }
 }

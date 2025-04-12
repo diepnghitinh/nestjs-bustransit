@@ -8,7 +8,7 @@ import {
     Provider,
   } from '@nestjs/common';
   import { ModuleRef } from '@nestjs/core';
-import { BUSTRANSIT_MODULE_OPTIONS } from './bustransit.constants';
+import {BUSTRANSIT_CONSUMERS, BUSTRANSIT_MODULE_OPTIONS} from './bustransit.constants';
 // import { BusTransitService } from './bustransit.service';
 import { BusTransitModuleOptions_Factory } from './factories/bustransit-options';
 import amqp from 'amqplib'
@@ -26,20 +26,25 @@ export class BusTransitCoreModule implements OnApplicationShutdown {
         private readonly busTransitService: BusTransitService,
     ) {}
 
-    static forRoot(options: any): DynamicModule {
+    static forRoot(options: any, consumers): DynamicModule {
         const busTransitModuleOptions: Provider = {
             provide: BUSTRANSIT_MODULE_OPTIONS,
             useValue: options,
         };
 
+        const busTransitConsumers: Provider = {
+            provide: BUSTRANSIT_CONSUMERS,
+            useValue: consumers,
+        };
+
         return {
             module: BusTransitCoreModule,
-            providers: [busTransitModuleOptions, BusTransitService],
+            providers: [busTransitModuleOptions, busTransitConsumers, BusTransitService],
             exports: [BusTransitService],
         };
     }
 
     async onApplicationShutdown() : Promise<void> {
-        // this.busTransitService.close();
+        this.busTransitService.close();
     }
 }
