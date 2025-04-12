@@ -59,6 +59,7 @@ export class RabbitMqBusFactoryConfigurator implements IRabbitMqBusFactoryConfig
 
     ReceiveEndpoint(queueName: string, e: (e: IRabbitMqReceiveEndpointConfigurator) => void): void {
         const rabbitMqReceiveEndpointConfigurator = new RabbitMqReceiveEndpointConfigurator();
+        rabbitMqReceiveEndpointConfigurator.QueueName = queueName;
         e(rabbitMqReceiveEndpointConfigurator);
     }
 

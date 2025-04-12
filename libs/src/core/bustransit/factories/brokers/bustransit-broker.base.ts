@@ -4,10 +4,12 @@ import {IBusTransitBrokerOptions} from "@core/bustransit/interfaces/brokers/bust
 export class BusTransitBrokerBaseFactory implements IBusTransitBrokerInterface {
 
     protected consumers = {};
+    protected consumersBindQueue = {};
 
     public setBrokerConfig(brokerConfig: IBusTransitBrokerOptions) {}
-    public setConsumers(consumers: any) {
+    public setConsumers(consumers: any, consumersBindQueue: any) {
         this.consumers = consumers;
+        this.consumersBindQueue = consumersBindQueue;
     }
 
     public start() {}

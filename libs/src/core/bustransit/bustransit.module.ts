@@ -11,6 +11,7 @@ export namespace BusTransit {
 
         private _rabbitMqBusFactoryConfigurator: RabbitMqBusFactoryConfigurator;
         private _consumers = {};
+        private _consumersBindQueue = {};
 
         static Setup(configure: (x: IAddBusTransit) => void): DynamicModule {
             const _instance = new AddBusTransit();
@@ -23,6 +24,7 @@ export namespace BusTransit {
                 imports: [BusTransitCoreModule.forRoot(
                     _instance._rabbitMqBusFactoryConfigurator.getOptions(),
                     _instance.consumers,
+                    _instance._consumersBindQueue,
                 )],
                 exports: [],
             };
@@ -37,7 +39,7 @@ export namespace BusTransit {
 
         AddConsumer<T extends BusTransitConsumer<any>>(consumerClass: new (...args: any[]) => T): void {
             Logger.debug(`** Added Consumer [${consumerClass.name}]`)
-            const consumerInstance = new consumerClass;
+            const consumerInstance = new consumerClass();
             this._consumers[consumerClass.name] = consumerInstance;
             return null;
         }
@@ -49,6 +51,10 @@ export namespace BusTransit {
 
         get consumers() {
             return this._consumers;
+        }
+
+        set consumersBindQueue( value ) {
+            this._consumersBindQueue = value;
         }
     }
 }

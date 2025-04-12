@@ -1,4 +1,4 @@
-import {IBusTransitConsumer} from "@core/bustransit/interfaces/_consumer";
+import {IBusTransitConsumer} from "@core/bustransit/interfaces/consumer.interface";
 
 export abstract class BusTransitConsumer<T> implements IBusTransitConsumer<T> {
     Consume(context) {

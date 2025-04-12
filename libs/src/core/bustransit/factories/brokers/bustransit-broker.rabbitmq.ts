@@ -26,11 +26,36 @@ export class BusTransitBrokerRabbitMqFactory extends BusTransitBrokerBaseFactory
         this.brokerConfig = brokerConfig;
     }
 
-    public startAllConsumer() {
+    public startAllConsumer()  {
         Object.entries( this.consumers ).map((key, value) => {
 
+            let consumerName = key[0];
             Logger.debug('Started Consumer ' + key[0]);
+            Logger.debug(this.consumers)
+            Logger.debug(this.consumersBindQueue)
 
+            let findConsumersBindQueue = this.consumersBindQueue[consumerName]
+            this.bindConsumerToQueue(consumerName, findConsumersBindQueue);
+
+        })
+    }
+
+    protected bindConsumerToQueue(consumerName: string, queueName: string) {
+
+        this.checkQueueAndAssert(queueName,() => {
+            this.channel.consume(queueName, this.consumers[consumerName].Consume).then((r) => {
+
+            });
+        })
+
+
+    }
+
+    private checkQueueAndAssert(queueName: string, callback) {
+        this.channel.assertQueue(queueName, {
+            durable: true,
+        }).then(() => {
+            callback();
         })
     }
 

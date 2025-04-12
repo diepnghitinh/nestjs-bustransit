@@ -28,7 +28,7 @@ const configService = new ConfigService();
 
                 cfg.ReceiveEndpoint("regular-orders", e => {
 
-                    e.ConfigureConsumer<SubmitOrderConsumer>(context, c => {
+                    e.ConfigureConsumer(SubmitOrderConsumer, context, c => {
                         c.UseMessageRetry();
                     });
 
