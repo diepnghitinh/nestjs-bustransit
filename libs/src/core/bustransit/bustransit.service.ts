@@ -23,7 +23,6 @@ export class BusTransitService {
     const brokerFactory = new BusTransitBrokerFactory();
     this.broker = brokerFactory.createInstance(options);
     this.broker.setConsumers(this.consumers, this.consumersBindQueue);
-    //console.log(this._);
     this.broker?.start();
   }
 

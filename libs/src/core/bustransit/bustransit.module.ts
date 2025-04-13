@@ -52,9 +52,5 @@ export namespace BusTransit {
         get consumers() {
             return this._consumers;
         }
-
-        set consumersBindQueue( value ) {
-            this._consumersBindQueue = value;
-        }
     }
 }

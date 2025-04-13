@@ -2,7 +2,8 @@ import {Logger} from "@nestjs/common";
 
 export class ConsumerConfigurator implements IConsumerConfigurator {
     private queueName: string;
-    private consumer: Function;
+    private _consumer: Function;
+    private _options: {};
 
     UseMessageRetry() {
         Logger.debug('UseMessageRetry');
@@ -12,7 +13,19 @@ export class ConsumerConfigurator implements IConsumerConfigurator {
         this.queueName = queueName;
     }
 
-    bindConsumer(consumer: Function) {
-        this.consumer = consumer;
+    bindConsumer(consumer: Function, options?: {}) {
+        this._consumer = consumer;
+    }
+
+    setOptions(options) {
+        this._options = options;
+    }
+
+    get options() {
+        return this._options;
+    }
+
+    get consumer() {
+        return this._consumer;
     }
 }

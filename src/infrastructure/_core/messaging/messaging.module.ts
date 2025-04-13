@@ -26,12 +26,17 @@ const configService = new ConfigService();
                     h.Password(configService.get('RMQ_PASSWORD'));
                 });
 
-                cfg.ReceiveEndpoint("regular-orders", e => {
-
+                cfg.ReceiveEndpoint("regular-orders-1", e => {
+                    e.PrefetchCount = 30;
                     e.ConfigureConsumer(SubmitOrderConsumer, context, c => {
                         c.UseMessageRetry();
                     });
+                });
 
+                cfg.ReceiveEndpoint("regular-orders-2", e => {
+                    e.ConfigureConsumer(SubmitOrderConsumer, context, c => {
+                        c.UseMessageRetry();
+                    });
                 });
             })
         }),
