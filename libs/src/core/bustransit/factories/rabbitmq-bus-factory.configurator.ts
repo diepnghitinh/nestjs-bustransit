@@ -7,7 +7,7 @@ import {IBusTransitBrokerOptions} from "@core/bustransit/interfaces/brokers/bust
 export class RabbitMqBusFactoryConfigurator implements IRabbitMqBusFactoryConfigurator
 {
     private prefetchCount: number = 50;
-    private durable: boolean = true;
+
     private options: IBusTransitBrokerOptions = {
         brokerName: '',
         brokerType: '',
@@ -60,6 +60,7 @@ export class RabbitMqBusFactoryConfigurator implements IRabbitMqBusFactoryConfig
     ReceiveEndpoint(queueName: string, e: (e: IRabbitMqReceiveEndpointConfigurator) => void): void {
         const rabbitMqReceiveEndpointConfigurator = new RabbitMqReceiveEndpointConfigurator();
         rabbitMqReceiveEndpointConfigurator.QueueName = queueName;
+        rabbitMqReceiveEndpointConfigurator.PrefetchCount = this.prefetchCount;
         e(rabbitMqReceiveEndpointConfigurator);
     }
 

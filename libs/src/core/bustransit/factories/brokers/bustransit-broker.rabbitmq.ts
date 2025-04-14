@@ -1,9 +1,13 @@
 import * as amqp from 'amqplib';
+
 import {IBusTransitBrokerOptions} from "@core/bustransit/interfaces/brokers/bustransit-broker.options.interface";
 import {BusTransitBrokerBaseFactory} from "@core/bustransit/factories/brokers/bustransit-broker.base";
-import {Logger} from "@nestjs/common";
+import {Inject, Injectable, Logger, ParamData} from "@nestjs/common";
 import {ConsumerConfigurator} from "@core/bustransit/factories/consumer.configurator";
+import { ClientProxy } from '@nestjs/microservices';
+import {BusTransitClientProxy} from "@core/bustransit/factories/brokers/client-proxy";
 
+@Injectable()
 export class BusTransitBrokerRabbitMqFactory extends BusTransitBrokerBaseFactory
 {
     brokerName = "RabbitMq"
@@ -50,14 +54,40 @@ export class BusTransitBrokerRabbitMqFactory extends BusTransitBrokerBaseFactory
         this.channelList[queueName] = channel;
     }
 
-    protected bindConsumerToQueue(consumer: Function, queueName: string) {
-
+    protected bindConsumerToQueue(
+        consumer: Function,
+        queueName: string
+    ) {
+        const busTransitClientProxy = new BusTransitClientProxy();
         this.checkQueueAndAssert(queueName,() => {
-            this.channelList[queueName].consume(queueName, consumer, {
+            let channel = this.channelList[queueName];
+            channel.consume(queueName, (message) => {
+                try {
+                    const consumerInstance = this.moduleRef.get(consumer);
+                    consumerInstance.Consume(message);
+                } catch (e) {
+                    // Move to Error queue
+
+                    // Move to skip queue
+
+                    Logger.error(e);
+
+                } finally {
+                    channel.ack(message)
+                }
+
+            }, {
+                noAck: false,
             }).then((r) => {
             });
         })
 
+    }
+
+    protected ConsumerHandler(consumer: Function) {
+        return () => {
+            return consumer
+        }
     }
 
     private checkQueueAndAssert(queueName: string, callback) {

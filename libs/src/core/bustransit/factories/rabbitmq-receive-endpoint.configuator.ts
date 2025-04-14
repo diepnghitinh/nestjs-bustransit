@@ -16,7 +16,7 @@ export class RabbitMqReceiveEndpointConfigurator implements
         const consumerConfigurator = new ConsumerConfigurator();
 
         consumerConfigurator.bindQueue(this.queueName);
-        consumerConfigurator.bindConsumer(ctx.consumers[(consumer as any).name].Consume);
+        consumerConfigurator.bindConsumer(ctx.consumers[(consumer as any).name]);
         consumerConfigurator.setOptions({
             PrefetchCount: this.PrefetchCount,
         })

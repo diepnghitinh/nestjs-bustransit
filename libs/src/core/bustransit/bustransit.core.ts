@@ -5,26 +5,32 @@ import {
     OnModuleDestroy,
     Global,
     Inject,
-    Provider,
-  } from '@nestjs/common';
-  import { ModuleRef } from '@nestjs/core';
-import {BUSTRANSIT_CONSUMERS, BUSTRANSIT_CONSUMERS_BIND_QUEUE, BUSTRANSIT_MODULE_OPTIONS} from './bustransit.constants';
-// import { BusTransitService } from './bustransit.service';
+    Provider, Logger, OnApplicationBootstrap, ParamData,
+} from '@nestjs/common';
+import {
+    BUSTRANSIT_CONSUMERS,
+    BUSTRANSIT_CONSUMERS_BIND_QUEUE,
+    BUSTRANSIT_MODULE_OPTIONS,
+} from './bustransit.constants';
 import { BusTransitModuleOptions_Factory } from './factories/bustransit-options';
 import amqp from 'amqplib'
 import {BusTransitService} from "@core/bustransit/bustransit.service";
-  
+import {IPublishEndpoint} from "@core/bustransit/interfaces/publish-endpoint.interface";
+import {PublishEndpoint} from "@core/bustransit/factories/publish-endpoint";
+import { ExternalContextCreator } from '@nestjs/core/helpers/external-context-creator';
+
 @Global()
 @Module({
-providers: [],
-exports: [],
+    providers: [],
+    exports: [],
 })
 export class BusTransitCoreModule implements OnApplicationShutdown {
 
     constructor(
         @Inject(BUSTRANSIT_MODULE_OPTIONS) private readonly options: BusTransitModuleOptions_Factory,
-        private readonly busTransitService: BusTransitService,
-    ) {}
+        private readonly externalContextCreator: ExternalContextCreator,
+        private readonly busTransitService: BusTransitService,) {
+    }
 
     static forRoot(options: any, consumers, consumersBindQueue): DynamicModule {
         const busTransitModuleOptions: Provider = {
@@ -42,10 +48,29 @@ export class BusTransitCoreModule implements OnApplicationShutdown {
             useValue: consumersBindQueue,
         };
 
+        const producerPublishEndpoint: Provider = {
+            provide: IPublishEndpoint, useClass: PublishEndpoint
+        };
+
+        const _consumersProvider = Object.entries(consumers).map((key, value) => {
+            return {
+                provide: consumers[key[0]], useClass: consumers[key[0]]
+            } as Provider;
+        });
+
         return {
             module: BusTransitCoreModule,
-            providers: [busTransitModuleOptions, busTransitConsumers, busTransitConsumersBindQueue, BusTransitService],
-            exports: [BusTransitService],
+            providers: [
+                ..._consumersProvider,
+                busTransitModuleOptions, busTransitConsumers, busTransitConsumersBindQueue,
+                producerPublishEndpoint,
+                BusTransitService,
+            ],
+            exports: [
+                ..._consumersProvider,
+                BusTransitService,
+                producerPublishEndpoint,
+            ],
         };
     }
 

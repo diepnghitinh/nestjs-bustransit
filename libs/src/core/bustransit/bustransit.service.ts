@@ -3,18 +3,20 @@ import {BUSTRANSIT_CONSUMERS, BUSTRANSIT_CONSUMERS_BIND_QUEUE, BUSTRANSIT_MODULE
 import {IBusTransitBrokerOptions} from "@core/bustransit/interfaces/brokers/bustransit-broker.options.interface";
 import {BusTransitBrokerFactory} from "@core/bustransit/factories/brokers/bustransit-broker";
 import {BusTransitBrokerBaseFactory} from "@core/bustransit/factories/brokers/bustransit-broker.base";
+import {ModuleRef} from "@nestjs/core";
 
-@Injectable()
 export class BusTransitService {
 
   private broker: BusTransitBrokerBaseFactory;
 
   constructor(
-      @Inject(BUSTRANSIT_MODULE_OPTIONS) options: IBusTransitBrokerOptions,
+      @Inject(BUSTRANSIT_MODULE_OPTIONS)
+      private readonly options: IBusTransitBrokerOptions,
       @Inject(BUSTRANSIT_CONSUMERS)
       private readonly consumers: any,
       @Inject(BUSTRANSIT_CONSUMERS_BIND_QUEUE)
       private readonly consumersBindQueue: any,
+      private readonly moduleRef: ModuleRef
   ) {
     this.createClient(options);
   }
@@ -22,7 +24,7 @@ export class BusTransitService {
   createClient(options: IBusTransitBrokerOptions) {
     const brokerFactory = new BusTransitBrokerFactory();
     this.broker = brokerFactory.createInstance(options);
-    this.broker.setConsumers(this.consumers, this.consumersBindQueue);
+    this.broker.setConsumers(this.moduleRef, this.consumers, this.consumersBindQueue);
     this.broker?.start();
   }
 

@@ -1,8 +1,14 @@
 import {BusTransit} from '@core/bustransit';
-import { Global, Logger, Module } from '@nestjs/common';
+import {Global, Logger, Module, Provider} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import '@configs/messaging.config';
-import {SubmitOrderConsumer} from "@infrastructure/messaging/consumers/SubmitOrderConsumer";
+import {
+    SubmitOrderConsumer,
+    SubmitOrderConsumerController
+} from "@infrastructure/messaging/consumers/SubmitOrderConsumer";
+import {TestOrderConsumer, TestOrderConsumerController} from "@infrastructure/messaging/consumers/TestOrderConsumer";
+import {IPublishEndpoint} from "@core/bustransit/interfaces/publish-endpoint.interface";
+import {PublishEndpoint} from "@core/bustransit/factories/publish-endpoint";
 
 const configService = new ConfigService();
 
@@ -11,14 +17,14 @@ const configService = new ConfigService();
     imports: [
         BusTransit.AddBusTransit.Setup((x) => {
 
-            x.AddConsumer(SubmitOrderConsumer);
+            x.AddConsumer(SubmitOrderConsumer, );
+            x.AddConsumer(TestOrderConsumer, );
 
             x.UsingRabbitMq((context, cfg) =>
             {
                 cfg.setName(configService.get('APP_NAME'));
 
                 cfg.PrefetchCount = 50;
-                cfg.Durable = true;
 
                 cfg.Host(configService.get('RMQ_HOST'), configService.get('RMQ_VHOST'), (h) =>
                 {
@@ -34,15 +40,19 @@ const configService = new ConfigService();
                 });
 
                 cfg.ReceiveEndpoint("regular-orders-2", e => {
-                    e.ConfigureConsumer(SubmitOrderConsumer, context, c => {
+                    e.ConfigureConsumer(TestOrderConsumer, context, c => {
                         c.UseMessageRetry();
                     });
                 });
             })
         }),
     ],
-    controllers: [],
-    providers: [],
+    controllers: [
+        SubmitOrderConsumerController,
+        TestOrderConsumerController,
+    ],
+    providers: [
+    ],
 })
 export class MessagingInfrastructureModule {}
 

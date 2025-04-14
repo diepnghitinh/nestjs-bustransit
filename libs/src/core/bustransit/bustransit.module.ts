@@ -3,6 +3,9 @@ import { BusTransitCoreModule } from './bustransit.core';
 import {BusTransitConsumer} from "@core/bustransit/factories/consumer";
 import {IAddBusTransit} from "@core/bustransit/interfaces/bustransit";
 import {RabbitMqBusFactoryConfigurator} from "@core/bustransit/factories/rabbitmq-bus-factory.configurator";
+import {PublishEndpoint} from "@core/bustransit/factories/publish-endpoint";
+import {SubmitOrderConsumer} from "@infrastructure/messaging/consumers/SubmitOrderConsumer";
+import {TestOrderConsumer} from "@infrastructure/messaging/consumers/TestOrderConsumer";
 
 export namespace BusTransit {
 
@@ -21,11 +24,16 @@ export namespace BusTransit {
 
             return {
                 module: BusTransit.AddBusTransit,
-                imports: [BusTransitCoreModule.forRoot(
-                    _instance._rabbitMqBusFactoryConfigurator.getOptions(),
-                    _instance.consumers,
-                    _instance._consumersBindQueue,
-                )],
+                imports: [
+                    BusTransitCoreModule.forRoot(
+                        _instance._rabbitMqBusFactoryConfigurator.getOptions(),
+                        _instance.consumers,
+                        _instance._consumersBindQueue,
+                    ),
+                ],
+                providers: [
+                    PublishEndpoint,
+                ],
                 exports: [],
             };
         }
@@ -39,8 +47,8 @@ export namespace BusTransit {
 
         AddConsumer<T extends BusTransitConsumer<any>>(consumerClass: new (...args: any[]) => T): void {
             Logger.debug(`** Added Consumer [${consumerClass.name}]`)
-            const consumerInstance = new consumerClass();
-            this._consumers[consumerClass.name] = consumerInstance;
+            //const consumerInstance = new consumerClass();
+            this._consumers[consumerClass.name] = consumerClass;
             return null;
         }
 
