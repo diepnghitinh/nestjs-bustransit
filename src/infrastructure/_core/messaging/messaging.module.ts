@@ -4,11 +4,8 @@ import { ConfigService } from '@nestjs/config';
 import '@configs/messaging.config';
 import {
     SubmitOrderConsumer,
-    SubmitOrderConsumerController
 } from "@infrastructure/messaging/consumers/SubmitOrderConsumer";
-import {TestOrderConsumer, TestOrderConsumerController} from "@infrastructure/messaging/consumers/TestOrderConsumer";
-import {IPublishEndpoint} from "@core/bustransit/interfaces/publish-endpoint.interface";
-import {PublishEndpoint} from "@core/bustransit/factories/publish-endpoint";
+import {TestOrderConsumer} from "@infrastructure/messaging/consumers/TestOrderConsumer";
 
 const configService = new ConfigService();
 
@@ -48,8 +45,6 @@ const configService = new ConfigService();
         }),
     ],
     controllers: [
-        SubmitOrderConsumerController,
-        TestOrderConsumerController,
     ],
     providers: [
     ],

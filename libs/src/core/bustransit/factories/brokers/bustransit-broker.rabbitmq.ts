@@ -4,8 +4,7 @@ import {IBusTransitBrokerOptions} from "@core/bustransit/interfaces/brokers/bust
 import {BusTransitBrokerBaseFactory} from "@core/bustransit/factories/brokers/bustransit-broker.base";
 import {Inject, Injectable, Logger, ParamData} from "@nestjs/common";
 import {ConsumerConfigurator} from "@core/bustransit/factories/consumer.configurator";
-import { ClientProxy } from '@nestjs/microservices';
-import {BusTransitClientProxy} from "@core/bustransit/factories/brokers/client-proxy";
+import * as os from "os";
 
 @Injectable()
 export class BusTransitBrokerRabbitMqFactory extends BusTransitBrokerBaseFactory
@@ -58,7 +57,6 @@ export class BusTransitBrokerRabbitMqFactory extends BusTransitBrokerBaseFactory
         consumer: Function,
         queueName: string
     ) {
-        const busTransitClientProxy = new BusTransitClientProxy();
         this.checkQueueAndAssert(queueName,() => {
             let channel = this.channelList[queueName];
             channel.consume(queueName, (message) => {
@@ -67,6 +65,16 @@ export class BusTransitBrokerRabbitMqFactory extends BusTransitBrokerBaseFactory
                     consumerInstance.Consume(message);
                 } catch (e) {
                     // Move to Error queue
+                    let queueError = `${queueName}`;
+                    this.checkQueueAndAssert(queueError, () => {
+                        this.sendToQueueWithChannel(this.channelList[queueName], `${queueError}_error`, {
+                            headers: message.properties.headers,
+                            message: JSON.parse(message.content.toString()),
+                            host: this.getSystemInfo()
+                        } as IErrorMessage);
+                    }, {
+                        suffix: "_error",
+                    })
 
                     // Move to skip queue
 
@@ -90,12 +98,26 @@ export class BusTransitBrokerRabbitMqFactory extends BusTransitBrokerBaseFactory
         }
     }
 
-    private checkQueueAndAssert(queueName: string, callback) {
-        this.channelList[queueName].assertQueue(queueName, {
+    private checkQueueAndAssert(queueName: string, callback, options?: { suffix : string }) {
+        this.channelList[queueName].assertQueue(`${queueName}${options?.suffix??''}`, {
             durable: true,
         }).then(() => {
             callback();
         })
+    }
+
+    private sendToQueueWithChannel(channel, queueName: string, message: any) {
+        channel.sendToQueue(queueName,  Buffer.from(JSON.stringify(message), "utf-8"));
+    }
+
+    private getSystemInfo() {
+        return {
+            machineName: os.hostname(),
+            processName: process.title,
+            processId: process.pid,    // Thay thế bằng version assembly thực tế của bạn (nếu có)
+            frameworkVersion: process.version, // Thay thế bằng version MassTransit thực tế của bạn (nếu có)
+            operatingSystemVersion: `${os.type()} ${os.release()}`
+        };
     }
 
     public close() {

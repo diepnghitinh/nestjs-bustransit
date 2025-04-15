@@ -11,3 +11,9 @@ interface IMessage<T> {
     "headers": any,
     "host": any
 }
+
+interface IErrorMessage {
+    headers: any,
+    message: string,
+    host: any,
+}
