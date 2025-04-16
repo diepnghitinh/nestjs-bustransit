@@ -1,5 +1,5 @@
 import {Logger} from "@nestjs/common";
-import {RetryConfigurator} from "@core/bustransit/factories/retry.configurator";
+import {RetryConfigurator, RetryLevel} from "@core/bustransit/factories/retry.configurator";
 import {interval, mergeMap, of, retry, throwError} from "rxjs";
 
 export class ConsumerConfigurator implements IConsumerConfigurator {
@@ -7,6 +7,7 @@ export class ConsumerConfigurator implements IConsumerConfigurator {
     private _consumer: Function;
     private _options: {};
     private _retryPattern: any;
+    private _redeliveryPattern: any;
 
     bindQueue(queueName: string) {
         this.queueName = queueName;
@@ -32,15 +33,19 @@ export class ConsumerConfigurator implements IConsumerConfigurator {
         return this._retryPattern;
     }
 
+    get redeliveryPattern() {
+        return this._redeliveryPattern;
+    }
+
     UseDelayedRedelivery(c: (c: IRetryConfigurator) => void) {
-        const retryConfigurator = new RetryConfigurator();
+        const retryConfigurator = new RetryConfigurator(RetryLevel.redelivery);
         const retryResult = c(retryConfigurator);
-        this._retryPattern = retryConfigurator.getRetryValue();
+        this._redeliveryPattern = retryConfigurator.getRetryValue();
         return retryResult;
     }
 
     UseMessageRetry(c: (c: IRetryConfigurator) => void) {
-        const retryConfigurator = new RetryConfigurator();
+        const retryConfigurator = new RetryConfigurator(RetryLevel.retry);
         const retryResult = c(retryConfigurator);
         this._retryPattern = retryConfigurator.getRetryValue();
         return retryResult;

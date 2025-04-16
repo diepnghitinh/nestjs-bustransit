@@ -20,6 +20,7 @@ import {
     tap, throwError, timer
 } from 'rxjs';
 import * as os from "os";
+import {IConsumeContext} from "@core/bustransit/interfaces/consumer.interface";
 
 @Injectable()
 export class BusTransitBrokerRabbitMqFactory extends BusTransitBrokerBaseFactory
@@ -52,12 +53,15 @@ export class BusTransitBrokerRabbitMqFactory extends BusTransitBrokerBaseFactory
             let queueName = key[0];
             let options = (key[1] as ConsumerConfigurator).options;
             let retryPattern = (key[1] as ConsumerConfigurator).retryPattern;
+            let redeliveryPattern = (key[1] as ConsumerConfigurator).redeliveryPattern;
+
             Logger.debug(`Started Consumer ${consumer.name}`);
 
             await this.createChannel(queueName, options);
             this.bindConsumerToQueue({
                 consumer: consumer,
                 retryPattern: retryPattern,
+                redeliveryPattern: redeliveryPattern,
             }, queueName);
             return true;
         });
@@ -73,55 +77,77 @@ export class BusTransitBrokerRabbitMqFactory extends BusTransitBrokerBaseFactory
     }
 
     protected bindConsumerToQueue(
-        bindConsume: { consumer: Function, retryPattern: any },
+        bindConsume: { consumer: Function, retryPattern: any, redeliveryPattern: any },
         queueName: string
     ) {
         this.checkQueueAndAssert(queueName,() => {
             let channel = this.channelList[queueName];
             channel.consume(queueName,  async (message) => {
 
+                const jsonMsg = JSON.parse(message.content.toString());
+
                 const consumerFunc = async (message) => {
-
                     const consumerInstance = this.moduleRef.get(bindConsume.consumer);
-                    await consumerInstance.Consume(message);
+                    await consumerInstance.Consume({
+                        Message: jsonMsg,
+                    }); // context
                     channel.ack(message)
-
-                    try {
-
-                    } catch (e) {
-
-
-
-                        // Move to skip queue
-
-                        Logger.error(e);
-
-                    } finally {
-                    }
                 }
 
                 const retryPattern = bindConsume.retryPattern;
+                const redeliveryPattern = bindConsume.redeliveryPattern;
                 const start = performance.now();
 
                 of(null).pipe(
                     mergeMap(() => {
                         return consumerFunc(message);
                     }),
-                    retryPattern,
+                    retryPattern.pipe,
                 ).subscribe({
                     next: (data) => {},
-                    error: (err) => {
+                    error: async (err) => {
                         Logger.error('Message error: ', err)
 
                         channel.ack(message)
 
+                        let queueDeclared = `${queueName}`;
+
+                        // TODO
+                        if (redeliveryPattern) {
+                            let delayExchange = `delayed.exchange.${queueName}`;
+                            let delayRoutingKey = `delayed.routing.${queueName}`;
+
+                            let exchangeDLX = `exchange_${queueName}_dlx`;
+                            let routingKeyDLX = `routing_${queueName}_dlx`;
+
+                            // Delayed exchange
+                            this.assertExchange(channel, delayExchange,"x-delayed-message", {
+                                autoDelete: false,
+                                durable: true,
+                                arguments: {'x-delayed-type': 'direct'}
+                            });
+
+                            // Dead letter Exchange and its queue
+                            // this.assertExchange(channel, exchangeDLX,'direct', {
+                            //     durable: true,
+                            // });
+
+                            // Queue binding to the exchange
+                            // await channel.bindQueue(queueDeclared, exchangeDelay);
+                            // await channel.bindQueue(queueDeclared, exchangeDLX, routingKeyDLX);
+                        }
+
                         // Move to Error queue
-                        let queueError = `${queueName}`;
-                        this.checkQueueAndAssert(queueError, () => {
-                            this.sendToQueueWithChannel(this.channelList[queueName], `${queueError}_error`, {
+                        console.log(  )
+                        this.checkQueueAndAssert(queueDeclared, () => {
+                            this.sendToQueueWithChannel(this.channelList[queueName], `${queueDeclared}_error`, {
                                 headers: message.properties.headers,
-                                message: JSON.parse(message.content.toString()),
-                                host: this.getSystemInfo()
+                                message: jsonMsg,
+                                host: this.getSystemInfo(),
+                                error: {
+                                    stack: err.stack,
+                                    message: err.message,
+                                },
                             } as IErrorMessage);
                         }, {
                             suffix: "_error",
@@ -148,10 +174,18 @@ export class BusTransitBrokerRabbitMqFactory extends BusTransitBrokerBaseFactory
 
     private checkQueueAndAssert(queueName: string, callback, options?: { suffix : string }) {
         this.channelList[queueName].assertQueue(`${queueName}${options?.suffix??''}`, {
-            durable: true,
+            durable: true
         }).then(() => {
             callback();
         })
+    }
+
+    private assertExchange(channel, exchangeName: string, type: string, options: any = {
+    }) {
+        channel.assertExchange(`${exchangeName}`, type, {
+            durable: true,
+            ...options,
+        });
     }
 
     private sendToQueueWithChannel(channel, queueName: string, message: any) {

@@ -1,0 +1,1 @@
+interface ISagaStateMachineInstance extends ISaga {}

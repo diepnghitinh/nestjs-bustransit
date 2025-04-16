@@ -34,6 +34,9 @@ const configService = new ConfigService();
                     e.ConfigureConsumer(SubmitOrderConsumer, context, c => {
                         c.UseMessageRetry(r => r.Immediate(5));
                     });
+
+                    // configure the saga last
+                    // e.ConfigureSaga<MySaga>(context);
                 });
 
                 cfg.ReceiveEndpoint("regular-orders-2", e => {

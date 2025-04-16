@@ -16,4 +16,5 @@ interface IErrorMessage {
     headers: any,
     message: string,
     host: any,
+    error: any,
 }

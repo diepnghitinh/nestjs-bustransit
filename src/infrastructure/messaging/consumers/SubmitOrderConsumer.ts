@@ -1,24 +1,31 @@
 import {Controller, Inject, Injectable, Logger} from "@nestjs/common";
-import {IBusTransitConsumer} from "@core/bustransit/interfaces/consumer.interface";
+import {IBusTransitConsumer, IConsumeContext} from "@core/bustransit/interfaces/consumer.interface";
 import {IPublishEndpoint} from "@core/bustransit/interfaces/publish-endpoint.interface";
+import {BusTransitConsumer} from "@core/bustransit/factories/consumer";
+import {plainToClass, plainToClassFromExist} from "@nestjs/class-transformer";
+import {parseClassAndValidate} from "@core/bustransit/factories/bustransit.utils";
+import {IsNotEmpty} from "@nestjs/class-validator";
 
-class Message {
+export class OrderMessage {
+    @IsNotEmpty()
     Text: string;
 }
 
 class SubmitOrderConsumerDefinition {}
 
 @Injectable()
-export class SubmitOrderConsumer implements IBusTransitConsumer<Message> {
+export class SubmitOrderConsumer extends BusTransitConsumer<OrderMessage> {
 
     constructor(
         @Inject(IPublishEndpoint)
         private readonly publishEndpoint: IPublishEndpoint,
-    ) {}
+    ) {
+        super(OrderMessage);
+    }
 
-    Consume(context) {
+    async Consume(context) {
+        await super.Consume(context)
         Logger.debug('SubmitOrderConsumer receive')
-        console.log(this.publishEndpoint);
-        this.publishEndpoint.Publish<any>({})
+        console.log(context.Message.Text);
     }
 }

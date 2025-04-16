@@ -16,7 +16,12 @@ import {
 } from "rxjs";
 import {retryWithDelay} from "@core/bustransit/factories/retry.utils";
 
-enum Retry {
+export enum RetryLevel {
+    retry,
+    redelivery,
+}
+
+export enum Retry {
     Immediate,
     Interval,
     Intervals
@@ -26,6 +31,11 @@ export class RetryConfigurator implements IRetryConfigurator {
 
     private retryType: Retry;
     private retryValue: any;
+    private type;
+
+    constructor(type: RetryLevel) {
+        this.type = type;
+    }
 
     Immediate(retryCount: number) {
         this.retryType = Retry.Immediate;
@@ -45,12 +55,22 @@ export class RetryConfigurator implements IRetryConfigurator {
     getRetryValue() {
         switch (this.retryType) {
             case Retry.Interval:
-                break;
+                return {
+                    retryType: this.retryType,
+                    retryValue: this.retryValue,
+                }
             case Retry.Intervals:
-                break;
+                return {
+                    retryType: this.retryType,
+                    retryValue: this.retryValue,
+                };
             case Retry.Immediate:
             default:
-                return retryWithDelay({ maxRetryAttempts: this.retryValue, delay: 0 });
+                return {
+                    retryType: this.retryType,
+                    retryValue: this.retryValue,
+                    pipe: retryWithDelay({ maxRetryAttempts: this.retryValue, delay: 0 })
+                };
         }
         return null;
     }
