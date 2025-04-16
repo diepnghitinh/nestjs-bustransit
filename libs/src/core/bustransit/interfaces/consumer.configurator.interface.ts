@@ -1,3 +1,4 @@
 interface IConsumerConfigurator {
-    UseMessageRetry();
+    UseMessageRetry(c: (c: IRetryConfigurator) => void);
+    UseDelayedRedelivery(c: (c: IRetryConfigurator) => void);
 }

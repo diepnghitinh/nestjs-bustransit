@@ -18,6 +18,9 @@ export class TestOrderConsumer implements IBusTransitConsumer<Message2> {
     ) {}
 
     Consume(context) {
-        throw new Error("Very bad things happened")
+        const randomNumber = Math.random() * 100;
+        // if (randomNumber > 0) {
+        //     throw new Error("Very bad things happened")
+        // }
     }
 }

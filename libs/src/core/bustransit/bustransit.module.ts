@@ -20,8 +20,6 @@ export namespace BusTransit {
             const _instance = new AddBusTransit();
             configure(_instance)
 
-            Logger.debug('Setup finish')
-
             return {
                 module: BusTransit.AddBusTransit,
                 imports: [
@@ -53,8 +51,8 @@ export namespace BusTransit {
         }
 
         start() {
-            Logger.debug('BusTransit start')
-            Logger.debug(this._rabbitMqBusFactoryConfigurator.getOptions());
+            Logger.debug('BusTransit started')
+            // Logger.debug(this._rabbitMqBusFactoryConfigurator.getOptions());
         }
 
         get consumers() {

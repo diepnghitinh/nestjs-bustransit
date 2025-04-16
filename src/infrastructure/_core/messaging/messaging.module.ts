@@ -32,13 +32,14 @@ const configService = new ConfigService();
                 cfg.ReceiveEndpoint("regular-orders-1", e => {
                     e.PrefetchCount = 30;
                     e.ConfigureConsumer(SubmitOrderConsumer, context, c => {
-                        c.UseMessageRetry();
+                        c.UseMessageRetry(r => r.Immediate(5));
                     });
                 });
 
                 cfg.ReceiveEndpoint("regular-orders-2", e => {
                     e.ConfigureConsumer(TestOrderConsumer, context, c => {
-                        c.UseMessageRetry();
+                        c.UseDelayedRedelivery(r => r.Intervals(5*60, 15*60, 30*60));
+                        c.UseMessageRetry(r => r.Immediate(5));
                     });
                 });
             })

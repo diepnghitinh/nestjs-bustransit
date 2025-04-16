@@ -4,6 +4,21 @@ import {IBusTransitBrokerOptions} from "@core/bustransit/interfaces/brokers/bust
 import {BusTransitBrokerBaseFactory} from "@core/bustransit/factories/brokers/bustransit-broker.base";
 import {Inject, Injectable, Logger, ParamData} from "@nestjs/common";
 import {ConsumerConfigurator} from "@core/bustransit/factories/consumer.configurator";
+import {
+    catchError,
+    defer,
+    delay,
+    delayWhen,
+    every,
+    finalize,
+    interval,
+    last,
+    lastValueFrom, map,
+    mergeMap, Observable, of, retry,
+    retryWhen, Subject, switchMap,
+    take, takeUntil,
+    tap, throwError, timer
+} from 'rxjs';
 import * as os from "os";
 
 @Injectable()
@@ -36,10 +51,14 @@ export class BusTransitBrokerRabbitMqFactory extends BusTransitBrokerBaseFactory
             let consumer = (key[1] as ConsumerConfigurator).consumer;
             let queueName = key[0];
             let options = (key[1] as ConsumerConfigurator).options;
-            Logger.debug('Started Consumer ');
+            let retryPattern = (key[1] as ConsumerConfigurator).retryPattern;
+            Logger.debug(`Started Consumer ${consumer.name}`);
 
             await this.createChannel(queueName, options);
-            this.bindConsumerToQueue(consumer, queueName);
+            this.bindConsumerToQueue({
+                consumer: consumer,
+                retryPattern: retryPattern,
+            }, queueName);
             return true;
         });
 
@@ -54,35 +73,64 @@ export class BusTransitBrokerRabbitMqFactory extends BusTransitBrokerBaseFactory
     }
 
     protected bindConsumerToQueue(
-        consumer: Function,
+        bindConsume: { consumer: Function, retryPattern: any },
         queueName: string
     ) {
         this.checkQueueAndAssert(queueName,() => {
             let channel = this.channelList[queueName];
-            channel.consume(queueName, (message) => {
-                try {
-                    const consumerInstance = this.moduleRef.get(consumer);
-                    consumerInstance.Consume(message);
-                } catch (e) {
-                    // Move to Error queue
-                    let queueError = `${queueName}`;
-                    this.checkQueueAndAssert(queueError, () => {
-                        this.sendToQueueWithChannel(this.channelList[queueName], `${queueError}_error`, {
-                            headers: message.properties.headers,
-                            message: JSON.parse(message.content.toString()),
-                            host: this.getSystemInfo()
-                        } as IErrorMessage);
-                    }, {
-                        suffix: "_error",
-                    })
+            channel.consume(queueName,  async (message) => {
 
-                    // Move to skip queue
+                const consumerFunc = async (message) => {
 
-                    Logger.error(e);
-
-                } finally {
+                    const consumerInstance = this.moduleRef.get(bindConsume.consumer);
+                    await consumerInstance.Consume(message);
                     channel.ack(message)
+
+                    try {
+
+                    } catch (e) {
+
+
+
+                        // Move to skip queue
+
+                        Logger.error(e);
+
+                    } finally {
+                    }
                 }
+
+                const retryPattern = bindConsume.retryPattern;
+                const start = performance.now();
+
+                of(null).pipe(
+                    mergeMap(() => {
+                        return consumerFunc(message);
+                    }),
+                    retryPattern,
+                ).subscribe({
+                    next: (data) => {},
+                    error: (err) => {
+                        Logger.error('Message error: ', err)
+
+                        channel.ack(message)
+
+                        // Move to Error queue
+                        let queueError = `${queueName}`;
+                        this.checkQueueAndAssert(queueError, () => {
+                            this.sendToQueueWithChannel(this.channelList[queueName], `${queueError}_error`, {
+                                headers: message.properties.headers,
+                                message: JSON.parse(message.content.toString()),
+                                host: this.getSystemInfo()
+                            } as IErrorMessage);
+                        }, {
+                            suffix: "_error",
+                        })
+
+                    },
+                    complete: () => Logger.log(`Completed consumer message ${bindConsume.consumer.name}, time: ${performance.now() - start}ms`)
+                });
+
 
             }, {
                 noAck: false,
