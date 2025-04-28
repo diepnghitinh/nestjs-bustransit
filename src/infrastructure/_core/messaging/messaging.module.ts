@@ -6,6 +6,12 @@ import {
     SubmitOrderConsumer,
 } from "@infrastructure/messaging/consumers/SubmitOrderConsumer";
 import {TestOrderConsumer} from "@infrastructure/messaging/consumers/TestOrderConsumer";
+import {OrderState, OrderStateMachine} from "@infrastructure/messaging/sagas/OrderProcessingStateMachine";
+import {ProcessPaymentConsumer} from "@infrastructure/messaging/sagas/ProcessPaymentConsumer";
+import {ProcessPayment} from "@shared/messages/message";
+import {ReserveInventoryConsumer} from "@infrastructure/messaging/sagas/ReserveInventoryConsumer";
+import {OrderRefundConsumer} from "@infrastructure/messaging/sagas/OrderRefundConsumer";
+import {OrderConfirmedConsumer} from "@infrastructure/messaging/sagas/OrderConfirmedConsumer";
 
 const configService = new ConfigService();
 
@@ -14,13 +20,28 @@ const configService = new ConfigService();
     imports: [
         BusTransit.AddBusTransit.Setup((x) => {
 
-            x.AddConsumer(SubmitOrderConsumer, );
-            x.AddConsumer(TestOrderConsumer, );
+            x.AddConsumer(SubmitOrderConsumer,);
+            x.AddConsumer(TestOrderConsumer,);
 
-            x.UsingRabbitMq((context, cfg) =>
+            // Other services
+            x.AddConsumer(ProcessPaymentConsumer,).Endpoint(e => {
+                e.Name = "saga-process-payment"
+            });
+            x.AddConsumer(ReserveInventoryConsumer,).Endpoint(e => {
+                e.Name = "saga-reserve-inventory"
+            });
+            x.AddConsumer(OrderConfirmedConsumer,).Endpoint(e => {
+                e.Name = "saga-order-confirmed"
+            });
+            x.AddConsumer(OrderRefundConsumer,).Endpoint(e => {
+                e.Name = "saga-order-refund"
+            });
+
+            x.AddSagaStateMachine(OrderStateMachine, OrderState);
+
+            // Sử dụng Name, các exchange sau này sẽ có dạng {APP_NAME}:{QUEUE} , {APP_NAME}:{EVENT...}
+            x.UsingRabbitMq(configService.get('APP_NAME'), (context, cfg) =>
             {
-                cfg.setName(configService.get('APP_NAME'));
-
                 cfg.PrefetchCount = 50;
 
                 cfg.Host(configService.get('RMQ_HOST'), configService.get('RMQ_VHOST'), (h) =>
@@ -34,15 +55,40 @@ const configService = new ConfigService();
                     e.ConfigureConsumer(SubmitOrderConsumer, context, c => {
                         c.UseMessageRetry(r => r.Immediate(5));
                     });
-
-                    // configure the saga last
-                    // e.ConfigureSaga<MySaga>(context);
                 });
 
                 cfg.ReceiveEndpoint("regular-orders-2", e => {
                     e.ConfigureConsumer(TestOrderConsumer, context, c => {
                         c.UseDelayedRedelivery(r => r.Intervals(5*60, 15*60, 30*60));
-                        c.UseMessageRetry(r => r.Immediate(5));
+                        //c.UseMessageRetry(r => r.Immediate(5));
+
+                        c.UseMessageRetry(r => r.Intervals(5000, 15000, 30000));
+                    });
+                });
+
+                cfg.ReceiveEndpoint("regular-order-saga", e => {
+                    e.ConfigureSaga(OrderState, context, (c) => {
+                    })
+                });
+
+                // Others services saga
+                cfg.ReceiveEndpoint("saga-process-payment", e => {
+                    e.ConfigureConsumer(ProcessPaymentConsumer, context, c => {
+                    });
+                });
+
+                cfg.ReceiveEndpoint("saga-reserve-inventory", e => {
+                    e.ConfigureConsumer(ReserveInventoryConsumer, context, c => {
+                    });
+                });
+
+                cfg.ReceiveEndpoint("saga-order-confirmed", e => {
+                    e.ConfigureConsumer(OrderConfirmedConsumer, context, c => {
+                    });
+                });
+
+                cfg.ReceiveEndpoint("saga-order-refund", e => {
+                    e.ConfigureConsumer(OrderRefundConsumer, context, c => {
                     });
                 });
             })

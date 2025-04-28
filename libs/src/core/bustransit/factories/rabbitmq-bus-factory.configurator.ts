@@ -20,7 +20,7 @@ export class RabbitMqBusFactoryConfigurator implements IRabbitMqBusFactoryConfig
         }
     }
 
-    public setName(name) {
+    public setClusterName(name) {
         this.options.brokerName = name;
     }
 

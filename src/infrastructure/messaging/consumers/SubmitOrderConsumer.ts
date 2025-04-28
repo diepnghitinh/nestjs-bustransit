@@ -23,9 +23,9 @@ export class SubmitOrderConsumer extends BusTransitConsumer<OrderMessage> {
         super(OrderMessage);
     }
 
-    async Consume(context) {
-        await super.Consume(context)
+    async Consume(ctx, context) {
+        await super.Consume(ctx, context)
         Logger.debug('SubmitOrderConsumer receive')
-        console.log(context.Message.Text);
+        console.log(context.Message);
     }
 }

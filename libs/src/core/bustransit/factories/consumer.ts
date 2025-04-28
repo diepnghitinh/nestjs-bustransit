@@ -1,21 +1,52 @@
 import {IBusTransitConsumer, IConsumeContext} from "@core/bustransit/interfaces/consumer.interface";
 import {parseClassAndValidate} from "@core/bustransit/factories/bustransit.utils";
+import {PublishEndpoint} from "@core/bustransit/factories/publish-endpoint";
+import {
+    IEndpointRegistrationConfigurator
+} from "@core/bustransit/interfaces/endpoint.registration.configurator.interface";
+import {BehaviorContext} from "@core/bustransit/factories/behavior.context";
 
 export abstract class BusTransitConsumer<TMessage extends object> implements IBusTransitConsumer<TMessage> {
 
     protected message;
+    private _publishEndpoint: PublishEndpoint;
+    private endpointRegistrationConfigurator;
+
+    get GetMessageClass() {
+        return this.message
+    };
 
     protected constructor(messageClass: new (...args: any[]) => TMessage) {
         this.message = messageClass;
     }
 
-    async Consume(context: IConsumeContext<TMessage>) {
+    async Consume(ctx: BehaviorContext<any, TMessage>, context: IConsumeContext<TMessage>) {
         const msg = await this.getMessage(context)
         context.Message = msg;
-        throw new Error("Method not implemented.");
+        context.messageType = msg.constructor.name;
+    }
+
+    set producer(publishEndpoint) {
+        this._publishEndpoint = publishEndpoint;
+    }
+
+    get producer() {
+        return this._publishEndpoint;
+    }
+
+    set EndpointRegistrationConfigurator(endpointRegistrationConfigurator: IEndpointRegistrationConfigurator) {
+        this.endpointRegistrationConfigurator = endpointRegistrationConfigurator;
+    }
+
+    get EndpointRegistrationConfigurator() {
+        return this.endpointRegistrationConfigurator;
     }
 
     async getMessage(context: IConsumeContext<TMessage>): Promise<TMessage> {
         return await parseClassAndValidate(this.message, context.Message);
+    }
+
+    getExchange(exchange: string) {
+        return exchange.split(':')[1];
     }
 }

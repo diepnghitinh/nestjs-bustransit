@@ -1,6 +1,5 @@
 import {Controller, Get, Inject} from '@nestjs/common';
 import { AppService } from './app.service';
-import {IPublishEndpoint} from "@core/bustransit/interfaces/publish-endpoint.interface";
 
 @Controller()
 export class AppController {
@@ -8,13 +7,19 @@ export class AppController {
       private readonly appService: AppService,
   ) {}
 
-  @Get()
-  getHello(): string {
-    return this.appService.getHello();
+  @Get('test-consumer')
+  producerPushText(): string {
+    this.appService.testConsumer();
+    return "ok";
   }
 
-  @Get('push')
-  producerPushText(): string {
-    return this.appService.getHello();
+  @Get('test-saga')
+  async sagaTest(): Promise<any> {
+    try {
+      const rs = await this.appService.testSaga();
+      return rs;
+    } catch (e) {
+      return "Failed: " + e.message;
+    }
   }
 }

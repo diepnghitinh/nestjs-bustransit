@@ -12,15 +12,15 @@ export async function parseClassAndValidate<T, V extends object>(
 
     const errors = await validate(transformedObject as object, validatorOptions);
 
-if (errors.length > 0) {
-    const errorMessages = errors.map((error: ValidationError) => {
-        if (error.constraints) {
-            return `${error.property}: ${Object.values(error.constraints).join(', ')}`;
-        }
-        return `${error.property}: Validation failed`;
-    });
-    throw new Error(`Parsing failed due to validation errors: ${errorMessages.join('; ')}`);
-}
+    if (errors.length > 0) {
+        const errorMessages = errors.map((error: ValidationError) => {
+            if (error.constraints) {
+                return `${error.property}: ${Object.values(error.constraints).join(', ')}`;
+            }
+            return `${error.property}: Validation failed`;
+        });
+        throw new Error(`Parsing failed due to validation errors: ${errorMessages.join('; ')}`);
+    }
 
-return transformedObject;
+    return transformedObject;
 }

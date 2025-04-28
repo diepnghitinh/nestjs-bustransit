@@ -20,10 +20,12 @@ export class TestOrderConsumer extends BusTransitConsumer<Message2> {
         super(Message2);
     }
 
-    async Consume(context) {
-        const randomNumber = Math.random() * 100;
-        if (randomNumber > 0) {
+    async Consume(ctx, context) {
+        const randomNumber = Math.random() * 50;
+        console.log(`ok ${randomNumber} - ` + new Date())
+        if (randomNumber < 20) {
             throw new Error("Very bad things happened")
         }
+        console.log(context.Message)
     }
 }

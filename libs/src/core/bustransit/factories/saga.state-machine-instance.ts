@@ -1,3 +1,4 @@
-class SagaStateMachineInstance implements ISagaStateMachineInstance {
+export class SagaStateMachineInstance implements ISagaStateMachineInstance {
     CorrelationId: string;
+    CurrentState: string;
 }

@@ -1,7 +1,11 @@
+Thư viện NestJs Service Bus đa năng
+
 # Roadmap
 
-[] Consumer
-[] Producer
+- [x] RabbitMq Broker
+- [x] Retry Level 1
+- [ ] Retry Level 2
+- [ ] kafka broker
 
-# RabbitMQ enable
-rabbitmq-plugins enable rabbitmq_delayed_message_exchange
+# Docs detail
+https://doc.clickup.com/7501365/d/h/74xhn-11358/2ea97bd7d954544

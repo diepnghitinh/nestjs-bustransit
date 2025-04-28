@@ -14,7 +14,7 @@ import {
     tap,
     throwError, timer
 } from "rxjs";
-import {retryWithDelay} from "@core/bustransit/factories/retry.utils";
+import {retryWithDelay, retryWithIntervals} from "@core/bustransit/factories/retry.utils";
 
 export enum RetryLevel {
     retry,
@@ -63,6 +63,7 @@ export class RetryConfigurator implements IRetryConfigurator {
                 return {
                     retryType: this.retryType,
                     retryValue: this.retryValue,
+                    pipe: retryWithIntervals(this.retryValue)
                 };
             case Retry.Immediate:
             default:

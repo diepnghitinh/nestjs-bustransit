@@ -1,6 +1,6 @@
 import {Logger} from "@nestjs/common";
 import {RetryConfigurator, RetryLevel} from "@core/bustransit/factories/retry.configurator";
-import {interval, mergeMap, of, retry, throwError} from "rxjs";
+import {BusTransitConsumer} from "@core/bustransit/factories/consumer";
 
 export class ConsumerConfigurator implements IConsumerConfigurator {
     private queueName: string;
@@ -25,7 +25,7 @@ export class ConsumerConfigurator implements IConsumerConfigurator {
         return this._options;
     }
 
-    get consumer() {
+    get consumer(): Function {
         return this._consumer;
     }
 

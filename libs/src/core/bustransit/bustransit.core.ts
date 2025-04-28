@@ -13,7 +13,6 @@ import {
     BUSTRANSIT_MODULE_OPTIONS,
 } from './bustransit.constants';
 import { BusTransitModuleOptions_Factory } from './factories/bustransit-options';
-import amqp from 'amqplib'
 import {BusTransitService} from "@core/bustransit/bustransit.service";
 import {IPublishEndpoint} from "@core/bustransit/interfaces/publish-endpoint.interface";
 import {PublishEndpoint} from "@core/bustransit/factories/publish-endpoint";
@@ -49,7 +48,7 @@ export class BusTransitCoreModule implements OnApplicationShutdown {
         };
 
         const producerPublishEndpoint: Provider = {
-            provide: IPublishEndpoint, useClass: PublishEndpoint
+            provide: IPublishEndpoint, useClass: PublishEndpoint,
         };
 
         const _consumersProvider = Object.entries(consumers).map((key, value) => {
@@ -68,8 +67,8 @@ export class BusTransitCoreModule implements OnApplicationShutdown {
             ],
             exports: [
                 ..._consumersProvider,
-                BusTransitService,
                 producerPublishEndpoint,
+                BusTransitService,
             ],
         };
     }

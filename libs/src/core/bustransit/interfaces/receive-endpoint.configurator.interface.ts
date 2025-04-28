@@ -7,4 +7,6 @@ interface IReceiveEndpointConfigurator {
     PrefetchCount: number;
 
     ConfigureConsumer<T>(genericClass: new (...args: any[]) => T, ctx, c: (c: IConsumerConfigurator) => void);
+
+    ConfigureSaga<T>(genericClass: new (...args: any[]) => T, ctx, c: (c: ISagaConfigurator) => void);
 }

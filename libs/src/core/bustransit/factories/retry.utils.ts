@@ -1,4 +1,4 @@
-import {finalize, Observable, retryWhen, switchMap, tap, throwError, timer} from "rxjs";
+import {finalize, Observable, retryWhen, delayWhen, switchMap, tap, throwError, timer} from "rxjs";
 import {Logger} from "@nestjs/common";
 
 export interface IRetryStratetyConfig {
@@ -60,3 +60,45 @@ export const retryWithDelay = ({
         })
     );
 };
+
+export const retryWithIntervals = <T>(intervals: number[]) => <T>(source$: Observable<T>) => {
+    let retryAttempts = 0; // Biến đếm số lần thử lại
+    return source$.pipe(
+        retryWhen((attempts: Observable<any>) => {
+            return attempts.pipe(
+                switchMap((error) => {
+                    // if maximum number of retries have been met
+                    // or response is a status code we don't wish to retry, throw error
+                    if (intervals.length > 0 && retryAttempts >= intervals.length) {
+                        return throwError(error);
+                    }
+                    const tryAfter = intervals.length > 0 ? intervals[retryAttempts] : 0;;
+
+                    retryAttempts++;
+                    Logger.log(`Attempt ${retryAttempts}: retrying after ${tryAfter}ms at ${new Date()}`);
+                    // retry after 1s, 2s, etc...
+                    return timer(tryAfter);
+                }),
+                finalize(() => Logger.log('Done with retrying.'))
+            );
+        }),
+        tap(() => {
+            retryAttempts = 0;
+        })
+
+
+        // retryWhen(errors =>
+        //     errors.pipe(
+        //         tap(err => {
+        //             if (intervals.length > 0 && retryAttempts >= intervals.length) {
+        //                 throw err; // Nếu đã thử lại hết số lần quy định, ném lỗi
+        //             }
+        //             const delayTime = intervals.length > 0 ? intervals[retryAttempts % intervals.length] : 0;
+        //             console.log(`Try after ${delayTime}ms... (Attempt ${retryAttempts + 1})`);
+        //             retryAttempts++;
+        //         }),
+        //         delayWhen(() => timer(intervals.length > 0 ? intervals[retryAttempts - 1] : 0)) // Sử dụng retryCount - 1 để lấy khoảng thời gian trước đó
+        //     )
+        // )
+    );
+}

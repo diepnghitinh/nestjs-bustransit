@@ -8,6 +8,10 @@ interface ISaga
     CorrelationId: string;
 }
 
-interface IState {}
+interface IState {
+}
 
-interface IEvent<T> {}
+interface IEvent<T> {
+    Name: string;
+    Value: T;
+}
