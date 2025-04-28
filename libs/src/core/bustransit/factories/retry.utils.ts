@@ -46,7 +46,7 @@ export const retryWithDelay = ({
                     }
                     const tryAfter = delay * scalingFactor ** (retryAttempts - 1);
 
-                    Logger.log(`Attempt ${retryAttempts}: retrying in ${tryAfter}ms`);
+                    Logger.log(`Retry: Attempt ${retryAttempts}: retrying in ${tryAfter}ms`);
                     // retry after 1s, 2s, etc...
                     return timer(tryAfter);
                 }),
@@ -75,7 +75,7 @@ export const retryWithIntervals = <T>(intervals: number[]) => <T>(source$: Obser
                     const tryAfter = intervals.length > 0 ? intervals[retryAttempts] : 0;;
 
                     retryAttempts++;
-                    Logger.log(`Attempt ${retryAttempts}: retrying after ${tryAfter}ms at ${new Date()}`);
+                    Logger.log(`Retry: Attempt ${retryAttempts}: retrying after ${tryAfter}ms at ${new Date()}`);
                     // retry after 1s, 2s, etc...
                     return timer(tryAfter);
                 }),

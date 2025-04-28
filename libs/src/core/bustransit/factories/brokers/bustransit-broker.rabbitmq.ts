@@ -198,8 +198,20 @@ export class BusTransitBrokerRabbitMqFactory extends BusTransitBrokerBaseFactory
         queueName: string,
         exchange?: string,
     ) {
-        await this.checkQueueAndAssert(queueName,() => {
+        await this.checkQueueAndAssert(queueName,async () => {
             let channel = this.channelList[queueName];
+            // Sử dụng redelivery
+            let delayExchange = `delayed.exchange.${queueName}`;
+            if (bindConsume.redeliveryPattern) {
+                // Delayed exchange
+                await this.assertExchange(channel, delayExchange,"x-delayed-message", {
+                    autoDelete: false,
+                    durable: true,
+                    arguments: {'x-delayed-type': 'direct'}
+                });
+                channel.bindQueue(queueName, this.getNameAddClusterPrefix(delayExchange), '');
+            }
+
             channel.consume(queueName,  async (message) => {
 
                 const jsonMsg = JSON.parse(message.content.toString());
@@ -229,14 +241,16 @@ export class BusTransitBrokerRabbitMqFactory extends BusTransitBrokerBaseFactory
                 const retryPattern = bindConsume.retryPattern ?? {
                     pipe: retryWithDelay({ maxRetryAttempts: 0, delay: 0 })
                 };
-                const redeliveryPattern = bindConsume.redeliveryPattern;
+                const redeliveryPattern = bindConsume.redeliveryPattern ?? {
+                    pipe: retryWithDelay({ maxRetryAttempts: 0, delay: 0 })
+                };
                 const start = performance.now();
 
                 of(null).pipe(
                     mergeMap(() => {
                         return consumerFunc(message);
                     }),
-                    retryPattern.pipe
+                    retryPattern.pipe,
                 ).subscribe({
                     next: (data) => {},
                     error: async (err) => {
@@ -247,18 +261,29 @@ export class BusTransitBrokerRabbitMqFactory extends BusTransitBrokerBaseFactory
 
                         // TODO
                         if (redeliveryPattern) {
-                            let delayExchange = `delayed.exchange.${queueName}`;
                             let delayRoutingKey = `delayed.routing.${queueName}`;
 
                             let exchangeDLX = `exchange_${queueName}_dlx`;
                             let routingKeyDLX = `routing_${queueName}_dlx`;
 
-                            // Delayed exchange
-                            // this.assertExchange(channel, delayExchange,"x-delayed-message", {
-                            //     autoDelete: false,
-                            //     durable: true,
-                            //     arguments: {'x-delayed-type': 'direct'}
-                            // });
+                            // Logger.debug(redeliveryPattern);
+                            // Logger.debug(message.properties.headers['x-redelivery'] ?? 0)
+                            // Logger.debug(message.properties.headers['x-redelivery'] + 1)
+
+                            let indexRedelivery = message.properties.headers['x-redelivery'] ?? 0;
+                            if (indexRedelivery < redeliveryPattern.retryValue.length) {
+                                Logger.log(`Redelivery: Attempt ${indexRedelivery + 1}: retrying in ${redeliveryPattern.retryValue[indexRedelivery]}ms`);
+                                this.channelList[queueName].publish(this.getNameAddClusterPrefix(delayExchange), '',  Buffer.from(JSON.stringify(jsonMsg), "utf-8"), {
+                                    headers: {
+                                        ...message.properties.headers,
+                                        "x-delay": redeliveryPattern.retryValue[indexRedelivery],
+                                        "x-redelivery": Number(indexRedelivery) + 1,
+                                    }
+                                });
+
+                                channel.ack(message)
+                                return;
+                            }
 
                             // Dead letter Exchange and its queue
                             // this.assertExchange(channel, exchangeDLX,'direct', {
@@ -284,6 +309,8 @@ export class BusTransitBrokerRabbitMqFactory extends BusTransitBrokerBaseFactory
                         }, {
                             suffix: "_error"
                         })
+
+                        channel.ack(message)
 
                     },
                     complete: () => {

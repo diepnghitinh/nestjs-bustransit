@@ -3,6 +3,7 @@ import {ConsumerConfigurator} from "@core/bustransit/factories/consumer.configur
 import {SagaConfigurator} from "@core/bustransit/factories/saga.configurator";
 import {TestOrderConsumer} from "@infrastructure/messaging/consumers/TestOrderConsumer";
 import {BusTransitConsumer} from "@core/bustransit/factories/consumer";
+import {RetryLevel} from "@core/bustransit/factories/retry.configurator";
 
 export class RabbitMqReceiveEndpointConfigurator implements
     IRabbitMqReceiveEndpointConfigurator

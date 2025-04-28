@@ -59,10 +59,9 @@ const configService = new ConfigService();
 
                 cfg.ReceiveEndpoint("regular-orders-2", e => {
                     e.ConfigureConsumer(TestOrderConsumer, context, c => {
-                        c.UseDelayedRedelivery(r => r.Intervals(5*60, 15*60, 30*60));
-                        //c.UseMessageRetry(r => r.Immediate(5));
-
-                        c.UseMessageRetry(r => r.Intervals(5000, 15000, 30000));
+                        c.UseDelayedRedelivery(r => r.Intervals(5000, 15000, 30000));
+                        // c.UseMessageRetry(r => r.Immediate(5));
+                        // c.UseMessageRetry(r => r.Intervals(5000, 15000, 30000));
                     });
                 });
 
