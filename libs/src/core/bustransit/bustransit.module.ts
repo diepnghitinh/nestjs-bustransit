@@ -22,9 +22,9 @@ export namespace BusTransit {
         /* name : consumer object */
         private _sagasConsumers = {}; // Now: support exchange from saga
 
-        static Setup(configure: (x: IAddBusTransit) => void): DynamicModule {
+        static setUp(busCfg: (x: IAddBusTransit) => void): DynamicModule {
             const _instance = new AddBusTransit();
-            configure(_instance)
+            busCfg(_instance)
 
             return {
                 module: BusTransit.AddBusTransit,

@@ -17,6 +17,7 @@ import {BusTransitService} from "@core/bustransit/bustransit.service";
 import {IPublishEndpoint} from "@core/bustransit/interfaces/publish-endpoint.interface";
 import {PublishEndpoint} from "@core/bustransit/factories/publish-endpoint";
 import { ExternalContextCreator } from '@nestjs/core/helpers/external-context-creator';
+import {BusTransit} from "@core/bustransit/bustransit.module";
 
 @Global()
 @Module({
@@ -28,10 +29,11 @@ export class BusTransitCoreModule implements OnApplicationShutdown {
     constructor(
         @Inject(BUSTRANSIT_MODULE_OPTIONS) private readonly options: BusTransitModuleOptions_Factory,
         private readonly externalContextCreator: ExternalContextCreator,
-        private readonly busTransitService: BusTransitService,) {
-    }
+        private readonly busTransitService: BusTransitService,
+    ) {}
 
     static forRoot(options: any, consumers, consumersBindQueue): DynamicModule {
+
         const busTransitModuleOptions: Provider = {
             provide: BUSTRANSIT_MODULE_OPTIONS,
             useValue: options,

@@ -1,7 +1,5 @@
 import {Controller, Inject, Injectable, Logger} from "@nestjs/common";
-import {IBusTransitConsumer} from "@core/bustransit/interfaces/consumer.interface";
 import {IPublishEndpoint} from "@core/bustransit/interfaces/publish-endpoint.interface";
-import {SubmitOrderConsumer} from "@infrastructure/messaging/consumers/SubmitOrderConsumer";
 import {BusTransitConsumer} from "@core/bustransit/factories/consumer";
 
 class Message2 {

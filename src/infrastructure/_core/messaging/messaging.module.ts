@@ -1,6 +1,6 @@
 import {BusTransit} from '@core/bustransit';
 import {Global, Logger, Module, Provider} from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import {ConfigModule, ConfigService} from '@nestjs/config';
 import '@configs/messaging.config';
 import {
     SubmitOrderConsumer,
@@ -8,7 +8,6 @@ import {
 import {TestOrderConsumer} from "@infrastructure/messaging/consumers/TestOrderConsumer";
 import {OrderState, OrderStateMachine} from "@infrastructure/messaging/sagas/OrderProcessingStateMachine";
 import {ProcessPaymentConsumer} from "@infrastructure/messaging/sagas/ProcessPaymentConsumer";
-import {ProcessPayment} from "@shared/messages/message";
 import {ReserveInventoryConsumer} from "@infrastructure/messaging/sagas/ReserveInventoryConsumer";
 import {OrderRefundConsumer} from "@infrastructure/messaging/sagas/OrderRefundConsumer";
 import {OrderConfirmedConsumer} from "@infrastructure/messaging/sagas/OrderConfirmedConsumer";
@@ -18,7 +17,7 @@ const configService = new ConfigService();
 @Global()
 @Module({
     imports: [
-        BusTransit.AddBusTransit.Setup((x) => {
+        BusTransit.AddBusTransit.setUp((x) => {
 
             x.AddConsumer(SubmitOrderConsumer,);
             x.AddConsumer(TestOrderConsumer,);
@@ -91,7 +90,7 @@ const configService = new ConfigService();
                     });
                 });
             })
-        }),
+        })
     ],
     controllers: [
     ],
