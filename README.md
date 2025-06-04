@@ -103,17 +103,7 @@ export class SubmitOrderConsumer extends BusTransitConsumer<OrderMessage> {
 # Saga Configure
 See details <a href="https://github.com/diepnghitinh/nestjs-bustransit/tree/main/example/src/infrastructure/messaging/sagas" target="_blank">saga consumer</a> & Workflow
 
-```mermaid
-stateDiagram-v2
-[*] --> Initial
-Initial --> ProcessingPayment: OrderSubmitted
-ProcessingPayment --> Failed: OrderFailed
-ProcessingPayment --> ReservingInventory: PaymentProcessedAdd commentMore actions
-ReservingInventory --> Failed: OrderFailed
-ReservingInventory --> Completed: InventoryReserved
-Failed --> [*]
-Completed --> [*]
-```
+![Saga](./docs/saga.png)
 
 Code configure
 ```javascript
