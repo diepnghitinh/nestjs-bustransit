@@ -51,7 +51,7 @@ yarn add nestjs-bustransit
                 cfg.ReceiveEndpoint("regular-orders-1", e => {
                     e.PrefetchCount = 30;
                     e.ConfigureConsumer(SubmitOrderConsumer, context, c => {
-                        c.UseMessageRetry(r => r.Immediate(5));
+                        c.UseMessageRetry(r => r.Immediate(5)); // Retry 5 times
                     });
                 });
 
@@ -64,7 +64,58 @@ yarn add nestjs-bustransit
 export class MessagingInfrastructureModule {}
 ```
 
+To use a Producer instance, inject it into the Consumer constructor with the IPublishEndpoint interface.
+```javascript
+export class OrderMessage {
+    @IsNotEmpty()
+    Text: string;
+}
+
+@Injectable()
+export class SubmitOrderConsumer extends BusTransitConsumer<OrderMessage> {
+
+    constructor(
+        @Inject(IPublishEndpoint)
+        private readonly publishEndpoint: IPublishEndpoint,
+    ) {
+        super(OrderMessage);
+    }
+
+    async Consume(ctx, context) {
+        await super.Consume(ctx, context)
+        Logger.debug('SubmitOrderConsumer receive')
+
+        // Active a Saga flow
+        const rs = await this.publishEndpoint.Send<OrderSubmitted>(new OrderSubmitted(
+            {
+                OrderId: uuidv7(),
+                Total: 10000,
+                Email: 'test@gmail.com'
+            }
+        ), null);
+
+        console.log(context.Message);
+        console.log(rs);
+    }
+}
+```
+
 # Saga Configure
+See details <a href="https://github.com/diepnghitinh/nestjs-bustransit/tree/main/example/src/infrastructure/messaging/sagas" target="_blank">saga consumer</a> & Workflow
+
+```mermaid
+stateDiagram-v2
+[*] --> Initial
+Initial --> ProcessingPayment: OrderSubmitted
+ProcessingPayment --> Failed: OrderFailed
+ProcessingPayment --> ReservingInventory: PaymentProcessedAdd commentMore actions
+ReservingInventory --> Failed: OrderFailed
+ReservingInventory --> Completed: InventoryReserved
+Failed --> [*]
+Completed --> [*]
+```
+
+Code configure
 ```javascript
 @Global()
 @Module({
