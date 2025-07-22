@@ -27,7 +27,7 @@ import { ExternalContextCreator } from '@nestjs/core/helpers/external-context-cr
         BusTransitService
     ],
 })
-export class BusTransitCoreModule implements OnApplicationShutdown {
+export class BusTransitCoreModule implements OnApplicationBootstrap, OnApplicationShutdown {
 
     constructor(
         @Inject(BUSTRANSIT_MODULE_OPTIONS) private readonly options: BusTransitModuleOptions_Factory,
@@ -80,5 +80,9 @@ export class BusTransitCoreModule implements OnApplicationShutdown {
 
     async onApplicationShutdown() : Promise<void> {
         this.busTransitService.close();
+    }
+
+    onApplicationBootstrap(): any {
+        this.busTransitService.startBroker();
     }
 }

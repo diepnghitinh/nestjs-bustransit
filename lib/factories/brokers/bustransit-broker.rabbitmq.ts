@@ -261,40 +261,40 @@ export class BusTransitBrokerRabbitMqFactory extends BusTransitBrokerBaseFactory
                         let queueDeclared = `${queueName}`;
 
                         // TODO
-                        if (redeliveryPattern) {
-                            let delayRoutingKey = `delayed.routing.${queueName}`;
-
-                            let exchangeDLX = `exchange_${queueName}_dlx`;
-                            let routingKeyDLX = `routing_${queueName}_dlx`;
-
-                            // Logger.debug(redeliveryPattern);
-                            // Logger.debug(message.properties.headers['x-redelivery'] ?? 0)
-                            // Logger.debug(message.properties.headers['x-redelivery'] + 1)
-
-                            let indexRedelivery = message.properties.headers['x-redelivery'] ?? 0;
-                            if (indexRedelivery < redeliveryPattern.retryValue.length) {
-                                Logger.log(`Redelivery: Attempt ${indexRedelivery + 1}: retrying in ${redeliveryPattern.retryValue[indexRedelivery]}ms`);
-                                this.channelList[queueName].publish(this.getNameAddClusterPrefix(delayExchange), '',  Buffer.from(JSON.stringify(jsonMsg), "utf-8"), {
-                                    headers: {
-                                        ...message.properties.headers,
-                                        "x-delay": redeliveryPattern.retryValue[indexRedelivery],
-                                        "x-redelivery": Number(indexRedelivery) + 1,
-                                    }
-                                });
-
-                                channel.ack(message)
-                                return;
-                            }
-
-                            // Dead letter Exchange and its queue
-                            // this.assertExchange(channel, exchangeDLX,'direct', {
-                            //     durable: true,
-                            // });
-
-                            // Queue binding to the exchange
-                            // await channel.bindQueue(queueDeclared, exchangeDelay);
-                            // await channel.bindQueue(queueDeclared, exchangeDLX, routingKeyDLX);
-                        }
+                        // if (redeliveryPattern) {
+                        //     let delayRoutingKey = `delayed.routing.${queueName}`;
+                        //
+                        //     let exchangeDLX = `exchange_${queueName}_dlx`;
+                        //     let routingKeyDLX = `routing_${queueName}_dlx`;
+                        //
+                        //     // Logger.debug(redeliveryPattern);
+                        //     // Logger.debug(message.properties.headers['x-redelivery'] ?? 0)
+                        //     // Logger.debug(message.properties.headers['x-redelivery'] + 1)
+                        //
+                        //     let indexRedelivery = message.properties.headers['x-redelivery'] ?? 0;
+                        //     if (indexRedelivery < redeliveryPattern.retryValue.length) {
+                        //         Logger.log(`Redelivery: Attempt ${indexRedelivery + 1}: retrying in ${redeliveryPattern.retryValue[indexRedelivery]}ms`);
+                        //         this.channelList[queueName].publish(this.getNameAddClusterPrefix(delayExchange), '',  Buffer.from(JSON.stringify(jsonMsg), "utf-8"), {
+                        //             headers: {
+                        //                 ...message.properties.headers,
+                        //                 "x-delay": redeliveryPattern.retryValue[indexRedelivery],
+                        //                 "x-redelivery": Number(indexRedelivery) + 1,
+                        //             }
+                        //         });
+                        //
+                        //         channel.ack(message)
+                        //         return;
+                        //     }
+                        //
+                        //     // Dead letter Exchange and its queue
+                        //     // this.assertExchange(channel, exchangeDLX,'direct', {
+                        //     //     durable: true,
+                        //     // });
+                        //
+                        //     // Queue binding to the exchange
+                        //     // await channel.bindQueue(queueDeclared, exchangeDelay);
+                        //     // await channel.bindQueue(queueDeclared, exchangeDLX, routingKeyDLX);
+                        // }
 
                         // Move to Error queue
                         await this.checkQueueAndAssert(queueDeclared, () => {

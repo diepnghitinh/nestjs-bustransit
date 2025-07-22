@@ -28,13 +28,18 @@ export class BusTransitService {
   createClient(options: IBusTransitBrokerOptions) {
     const brokerFactory = new BusTransitBrokerFactory();
     this.broker = brokerFactory.createInstance(options);
+    console.log('DEBUGGGG client');
     this.broker.setModuleRef(this.moduleRef, );
     this.broker.setConsumers(this.consumers, this.consumersBindQueue);
-    this.broker?.start();
+    // this.broker?.start();
   }
 
   getBroker() {
     return this.broker;
+  }
+
+  startBroker() {
+    this.broker?.start();
   }
 
   close() {
