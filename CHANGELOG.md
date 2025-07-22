@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.6 - 2025-22-07
+## 0.1.7 - 2025-22-07
 
 - Fixed starting consumer after bootstrap
 
