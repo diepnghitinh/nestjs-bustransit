@@ -19,6 +19,7 @@ export namespace BusTransit {
         private _rabbitMqBusFactoryConfigurator: RabbitMqBusFactoryConfigurator;
         private _consumers = {};
         private _consumersBindQueue = {};
+        private _messagesBindQueue = {};
 
         /* name : consumer object */
         private _sagasConsumers = {}; // Now: support exchange from saga
@@ -34,6 +35,7 @@ export namespace BusTransit {
                         _instance._rabbitMqBusFactoryConfigurator.getOptions(),
                         _instance.consumers,
                         _instance._consumersBindQueue,
+                        _instance._messagesBindQueue,
                     ),
                 ],
                 providers: [
@@ -56,6 +58,12 @@ export namespace BusTransit {
             this._consumers[consumerClass.name] = consumerClass;
             let cfg = new ConsumerRegistrationConfigurator(consumerClass);
             return cfg;
+        }
+
+        AddMessage<T>(messageClass: new (...args: any[]) => T): IConsumerRegistrationConfigurator<T> {
+            this._messagesBindQueue[messageClass.name] = messageClass;
+            let cfg = new ConsumerRegistrationConfigurator(messageClass);
+            return cfg
         }
 
         AddSagaStateMachine<TSagaMachine extends BusTransitStateMachine<any>, TSaga>(

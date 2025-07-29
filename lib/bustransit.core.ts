@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import {
     BUSTRANSIT_CONSUMERS,
-    BUSTRANSIT_CONSUMERS_BIND_QUEUE,
+    BUSTRANSIT_CONSUMERS_BIND_QUEUE, BUSTRANSIT_MESSSAGES_BIND_QUEUE,
     BUSTRANSIT_MODULE_OPTIONS,
 } from './bustransit.constants';
 import { BusTransitModuleOptions_Factory } from './factories/bustransit-options';
@@ -35,7 +35,7 @@ export class BusTransitCoreModule implements OnApplicationBootstrap, OnApplicati
         private readonly busTransitService: BusTransitService,
     ) {}
 
-    static forRoot(options: any, consumers, consumersBindQueue): DynamicModule {
+    static forRoot(options: any, consumers, consumersBindQueue, messagesBindQueue): DynamicModule {
 
         const busTransitModuleOptions: Provider = {
             provide: BUSTRANSIT_MODULE_OPTIONS,
@@ -50,6 +50,11 @@ export class BusTransitCoreModule implements OnApplicationBootstrap, OnApplicati
         const busTransitConsumersBindQueue: Provider = {
             provide: BUSTRANSIT_CONSUMERS_BIND_QUEUE,
             useValue: consumersBindQueue,
+        };
+
+        const busTransitMessagesBindQueue: Provider = {
+            provide: BUSTRANSIT_MESSSAGES_BIND_QUEUE,
+            useValue: messagesBindQueue,
         };
 
         const producerPublishEndpoint: Provider = {
@@ -67,6 +72,7 @@ export class BusTransitCoreModule implements OnApplicationBootstrap, OnApplicati
             providers: [
                 ..._consumersProvider,
                 busTransitModuleOptions, busTransitConsumers, busTransitConsumersBindQueue,
+                busTransitMessagesBindQueue,
                 producerPublishEndpoint,
                 BusTransitService,
             ],

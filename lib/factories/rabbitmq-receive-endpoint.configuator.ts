@@ -25,7 +25,7 @@ export class RabbitMqReceiveEndpointConfigurator implements
     }
 
     ConfigureConsumer<T>(consumer: T, ctx, c: (c: IConsumerConfigurator) => void) {
-        let consumerBind = ctx.consumers[(consumer as any).name];
+        let consumerBind = ctx.consumers[(consumer as any).name] ?? (consumer as any).name;
         const consumerConfigurator = new ConsumerConfigurator();
         consumerConfigurator.bindQueue(this.queueName);
         consumerConfigurator.bindConsumer(consumerBind);

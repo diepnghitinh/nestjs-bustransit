@@ -5,6 +5,8 @@ import {
     IEndpointRegistrationConfigurator
 } from "../interfaces/endpoint.registration.configurator.interface";
 import {EndpointRegistrationConfigurator} from "./endpoint.registration.configurator";
+import {ConsumerConfigurator} from "./consumer.configurator";
+import {Logger} from "@nestjs/common";
 
 export class ConsumerRegistrationConfigurator<TConsumer> implements IConsumerRegistrationConfigurator<TConsumer> {
 

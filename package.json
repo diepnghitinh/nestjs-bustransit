@@ -1,6 +1,6 @@
 {
   "name": "nestjs-bustransit",
-  "version": "0.1.7",
+  "version": "0.2.0",
   "description": "ServiceBus for NestJs",
   "author": "nguyen2242x@gmail.com",
   "license": "MIT",

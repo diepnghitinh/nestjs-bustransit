@@ -11,4 +11,5 @@ export interface IAddBusTransit {
         machineClass: new (...args: any[]) => TSagaMachine,
         stateClass: new (...args: any[]) => TSaga,
     ): IConsumerRegistrationConfigurator<TSagaMachine>;
+    AddMessage<T>(messageClass: new (...args: any[]) => T): IConsumerRegistrationConfigurator<T>;
 }

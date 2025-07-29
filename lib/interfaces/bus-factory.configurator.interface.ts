@@ -8,4 +8,6 @@ export interface IBusFactoryConfigurator<T> extends IReceiveConfigurator<T> {
     /// <value>The limit</value>
     set PrefetchCount(value: number);
 
+    ConfigureEndpoints(ctx): void;
+
 }

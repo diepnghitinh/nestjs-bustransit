@@ -8,6 +8,7 @@ export class BusTransitBrokerBaseFactory implements IBusTransitBrokerInterface {
 
     protected consumers = {};
     protected consumersToEndpoint = {};
+    protected messagesToEndpoint = {};
     protected classConsumerToEndpoint = {};
     protected classMessageToEndpoint = {};
     protected classMessageToExchange = {};
@@ -18,13 +19,17 @@ export class BusTransitBrokerBaseFactory implements IBusTransitBrokerInterface {
     public setModuleRef(moduleRef) {
         this.moduleRef = moduleRef;
     }
-    public setConsumers(consumers: any, consumersToEndpoint: any) {
+    public setConsumers(consumers: any, consumersToEndpoint: any, messagesToEndpoint: any) {
         this.consumers = consumers;
         this.consumersToEndpoint = consumersToEndpoint;
+        this.messagesToEndpoint = messagesToEndpoint;
         Object.entries( this.consumers ).map((key, value) => {
             if (Object.getPrototypeOf(key[1]) === BusTransitStateMachine) {
                 this.sagas[key[0]] = key[1]
             }
+        });
+        Object.entries( this.messagesToEndpoint ).map((key, value) => {
+            this.classMessageToEndpoint[key[0]] = key[1]
         });
     }
 

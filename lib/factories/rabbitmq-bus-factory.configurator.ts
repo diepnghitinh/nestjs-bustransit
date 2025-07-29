@@ -67,6 +67,10 @@ export class RabbitMqBusFactoryConfigurator implements IRabbitMqBusFactoryConfig
         e(rabbitMqReceiveEndpointConfigurator);
     }
 
+    ConfigureEndpoints(ctx): void {
+        console.log(ctx);
+    }
+
     getOptions() {
         return this.options;
     }
