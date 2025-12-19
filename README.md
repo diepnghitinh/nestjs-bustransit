@@ -25,11 +25,40 @@ yarn add nestjs-bustransit
 
 # Roadmap
 - [x] RabbitMq Broker
-- [x] Retry Level 1
-- [x] Retry Level 2
+- [x] Retry Level 1 (Immediate, Interval, Intervals, Exponential)
+- [x] Retry Level 2 (Redelivery with all strategies)
 - [x] Saga pattern
-- [ ] Saga compensation
+- [x] Saga compensation
 - [ ] Kafka broker
+
+# Retry Strategies
+
+This library provides comprehensive retry mechanisms with 4 different strategies:
+
+1. **Immediate**: Retry immediately without delay
+2. **Interval**: Retry with fixed delay between attempts
+3. **Intervals**: Retry with custom delays for each attempt
+4. **Exponential**: Retry with exponentially increasing delays (recommended for production)
+
+Each strategy can be used for both:
+- **Level 1 (Retry)**: In-memory immediate retries
+- **Level 2 (Redelivery)**: Message requeue with delays using RabbitMQ delayed exchange
+
+See the complete guide: [RETRY_STRATEGIES.md](./RETRY_STRATEGIES.md)
+
+Quick example:
+```typescript
+cfg.ReceiveEndpoint("my-queue", e => {
+    e.ConfigureConsumer(MyConsumer, context, c => {
+        // Level 1: Fast immediate retries
+        c.UseMessageRetry(r => r.Immediate(3));
+
+        // Level 2: Exponential backoff redelivery
+        c.UseRedelivery(r => r.Exponential(5, 5000, 2));
+        // Delays: 5s, 10s, 20s, 40s, 80s
+    });
+});
+```
 
 # Consumer configure
 ```javascript
@@ -51,7 +80,8 @@ yarn add nestjs-bustransit
                 cfg.ReceiveEndpoint("regular-orders-1", e => {
                     e.PrefetchCount = 30;
                     e.ConfigureConsumer(SubmitOrderConsumer, context, c => {
-                        c.UseMessageRetry(r => r.Immediate(5)); // Retry 5 times
+                        c.UseMessageRetry(r => r.Immediate(5)); // Retry 5 times immediately
+                        c.UseRedelivery(r => r.Exponential(5, 5000, 2)); // Exponential backoff
                     });
                 });
 
@@ -104,6 +134,28 @@ export class SubmitOrderConsumer extends BusTransitConsumer<OrderMessage> {
 See details <a href="https://github.com/diepnghitinh/nestjs-bustransit/tree/main/example/src/infrastructure/messaging/sagas" target="_blank">saga consumer</a> & Workflow
 
 ![Saga](./docs/saga.png)
+
+## Saga Compensation Pattern
+The library now supports automatic compensation for failed sagas. Define compensation actions for each step, and they'll automatically execute in reverse order when a failure occurs.
+
+See the complete guide: [COMPENSATION.md](./COMPENSATION.md)
+
+Quick example:
+```typescript
+this.When(PaymentProcessed)
+    .Then(c => {
+        c.Saga.PaymentIntentId = c.Message.PaymentIntentId;
+    })
+    .PublishAsync<ReserveInventory>(ReserveInventory, c => {
+        // Forward transaction
+        return new ReserveInventory();
+    })
+    .Compensate(async c => {
+        // Compensation transaction - refund the payment
+        await refundPayment(c.Saga.PaymentIntentId);
+    })
+    .TransitionTo(this.ReservingInventory)
+```
 
 Code configure
 ```javascript

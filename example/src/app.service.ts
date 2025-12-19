@@ -2,7 +2,7 @@ import {Inject, Injectable} from '@nestjs/common';
 import {OrderSubmitted} from "@infrastructure/messaging/sagas/OrderProcessingStateMachine";
 import { v7 as uuidv7 } from 'uuid';
 import {OrderMessage} from "@infrastructure/messaging/consumers/SubmitOrderConsumer";
-import {IPublishEndpoint} from "nestjs-bustransit";
+import { IPublishEndpoint } from 'nestjs-bustransit';
 
 @Injectable()
 export class AppService {
