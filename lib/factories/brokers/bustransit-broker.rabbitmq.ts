@@ -50,6 +50,8 @@ export class BusTransitBrokerRabbitMqFactory extends BusTransitBrokerBaseFactory
     private channelList: Map<string, amqp.Channel> = new Map<string, amqp.Channel>();
     private reconnectDelay = 5000;
     private isConnecting = false;
+    private delayedMessagePluginSupported: boolean = false;
+    private queueRedeliveryEnabled: Map<string, boolean> = new Map<string, boolean>();
 
     public async start() {
         if (this.isConnecting) return;
@@ -64,6 +66,7 @@ export class BusTransitBrokerRabbitMqFactory extends BusTransitBrokerBaseFactory
             });
 
             await this.createChannel(this.channelProducer, {});
+            await this.checkDelayedMessagePlugin();
             const exchangeCreated = await this.startAllConsumer();
 
             this.connection.on('close', () => {
@@ -80,6 +83,72 @@ export class BusTransitBrokerRabbitMqFactory extends BusTransitBrokerBaseFactory
 
     private getProducerChannel(): amqp.Channel {
         return this.channelList[this.channelProducer];
+    }
+
+    /**
+     * Get the status of x-delayed-message plugin support
+     */
+    public isDelayedMessagePluginSupported(): boolean {
+        return this.delayedMessagePluginSupported;
+    }
+
+    /**
+     * Check if redelivery is enabled for a specific queue
+     * Redelivery requires both configuration AND x-delayed-message plugin support
+     */
+    public isRedeliveryEnabledForQueue(queueName: string): boolean {
+        return this.queueRedeliveryEnabled.get(queueName) ?? false;
+    }
+
+    /**
+     * Check if RabbitMQ x-delayed-message plugin is installed
+     * Uses a temporary channel to avoid affecting the main producer channel
+     */
+    private async checkDelayedMessagePlugin(): Promise<void> {
+        let testChannel: amqp.Channel | null = null;
+        const testExchangeName = '_test_delayed_exchange_' + Date.now();
+
+        try {
+            // Create a temporary channel for testing to avoid affecting the main producer channel
+            testChannel = await this.connection.createChannel();
+
+            // Suppress channel errors during the test
+            testChannel.on('error', (err) => {
+                // Expected error when plugin is not available
+                Logger.debug(`[RabbitMQ] Test channel error (expected if plugin not installed): ${err.message}`);
+            });
+
+            // Try to create a delayed exchange to test plugin availability
+            await testChannel.assertExchange(testExchangeName, 'x-delayed-message', {
+                autoDelete: true,
+                durable: false,
+                arguments: { 'x-delayed-type': 'direct' }
+            });
+
+            // If successful, delete the test exchange
+            await testChannel.deleteExchange(testExchangeName);
+
+            this.delayedMessagePluginSupported = true;
+            Logger.log('[RabbitMQ] ✓ x-delayed-message plugin is available');
+        } catch (error) {
+            this.delayedMessagePluginSupported = false;
+            Logger.warn(
+                '[RabbitMQ] ⚠ WARNING: x-delayed-message plugin is NOT installed or not enabled. ' +
+                'Delayed/scheduled message features will not work. ' +
+                'Please install the plugin: https://github.com/rabbitmq/rabbitmq-delayed-message-exchange'
+            );
+            Logger.debug(`[RabbitMQ] Plugin check error: ${error.message}`);
+        } finally {
+            // Always close the test channel
+            if (testChannel) {
+                try {
+                    await testChannel.close();
+                } catch (closeError) {
+                    // Channel might already be closed by RabbitMQ
+                    Logger.debug(`[RabbitMQ] Test channel close: ${closeError.message}`);
+                }
+            }
+        }
     }
 
     public setBrokerConfig(brokerConfig: IBusTransitBrokerOptions) {
@@ -232,6 +301,15 @@ export class BusTransitBrokerRabbitMqFactory extends BusTransitBrokerBaseFactory
         const channel = await this.connection.createChannel();
         await channel.prefetch(options.PrefetchCount);
 
+        // Add error handler to prevent uncaught channel errors
+        channel.on('error', (err) => {
+            Logger.error(`[RabbitMQ] Channel error for '${queueName}': ${err.message}`);
+        });
+
+        channel.on('close', () => {
+            Logger.warn(`[RabbitMQ] Channel closed for '${queueName}'`);
+        });
+
         this.channelList[queueName] = channel;
     }
 
@@ -244,16 +322,48 @@ export class BusTransitBrokerRabbitMqFactory extends BusTransitBrokerBaseFactory
             queueName,
             async () => {
                 const channel = this.channelList[queueName];
-                // Sử dụng redelivery
+                // Check if redelivery can be enabled (requires both configuration AND plugin support)
                 const delayExchange = `delayed.exchange.${queueName}`;
+                const canEnableRedelivery = bindConsume.redeliveryPattern && this.delayedMessagePluginSupported;
+
                 if (bindConsume.redeliveryPattern) {
-                    // Delayed exchange
-                    await this.assertExchange(channel, delayExchange, 'x-delayed-message', {
-                        autoDelete: false,
-                        durable: true,
-                        arguments: { 'x-delayed-type': 'direct' },
-                    });
-                    channel.bindQueue(queueName, this.getNameAddClusterPrefix(delayExchange), '');
+                    if (!this.delayedMessagePluginSupported) {
+                        // Redelivery requested but plugin not available
+                        this.queueRedeliveryEnabled.set(queueName, false);
+                        Logger.warn(
+                            `[RabbitMQ] Redelivery pattern configured for queue '${queueName}' but x-delayed-message plugin is NOT available. ` +
+                            `Redelivery is DISABLED. Install plugin: https://github.com/rabbitmq/rabbitmq-delayed-message-exchange`
+                        );
+                    } else {
+                        // Redelivery enabled: create delayed exchange
+                        try {
+                            await this.assertExchange(channel, delayExchange, 'x-delayed-message', {
+                                autoDelete: false,
+                                durable: true,
+                                arguments: { 'x-delayed-type': 'direct' },
+                            });
+                            await channel.bindQueue(queueName, this.getNameAddClusterPrefix(delayExchange), '');
+
+                            this.queueRedeliveryEnabled.set(queueName, true);
+                            Logger.log(`[RabbitMQ] ✓ Redelivery enabled for queue '${queueName}'`);
+                        } catch (error) {
+                            // Failed to create delayed exchange even though plugin check passed
+                            this.queueRedeliveryEnabled.set(queueName, false);
+                            this.delayedMessagePluginSupported = false; // Update global flag
+
+                            Logger.error(
+                                `[RabbitMQ] ✗ Failed to create delayed exchange for queue '${queueName}'. ` +
+                                `Error: ${error.message}. Redelivery is DISABLED.`
+                            );
+                            Logger.warn(
+                                `[RabbitMQ] This may indicate the x-delayed-message plugin became unavailable ` +
+                                `or there are permission issues. All queues will have redelivery disabled.`
+                            );
+                        }
+                    }
+                } else {
+                    // No redelivery configured
+                    this.queueRedeliveryEnabled.set(queueName, false);
                 }
 
                 channel
@@ -320,8 +430,10 @@ export class BusTransitBrokerRabbitMqFactory extends BusTransitBrokerBaseFactory
 
                                         const queueDeclared = `${queueName}`;
 
-                                        // Redelivery pattern - use x-delayed-message exchange for retry with delay
-                                        if (redeliveryPattern && redeliveryPattern.retryValue) {
+                                        // Redelivery pattern - only if enabled for this queue (requires plugin support)
+                                        const isRedeliveryEnabled = this.queueRedeliveryEnabled.get(queueName) ?? false;
+
+                                        if (redeliveryPattern && redeliveryPattern.retryValue && isRedeliveryEnabled) {
                                             const indexRedelivery = message.properties.headers?.['x-redelivery'] ?? 0;
 
                                             // Determine delay based on retry type
@@ -352,7 +464,7 @@ export class BusTransitBrokerRabbitMqFactory extends BusTransitBrokerBaseFactory
                                             }
 
                                             if (indexRedelivery < maxRetries) {
-                                                Logger.log(`Redelivery: Attempt ${indexRedelivery + 1}/${maxRetries}: retrying in ${delayMs}ms`);
+                                                Logger.log(`[RabbitMQ] Redelivery: Attempt ${indexRedelivery + 1}/${maxRetries}: retrying in ${delayMs}ms`);
 
                                                 try {
                                                     this.channelList[queueName].publish(
@@ -374,8 +486,14 @@ export class BusTransitBrokerRabbitMqFactory extends BusTransitBrokerBaseFactory
                                                     Logger.error('Failed to publish redelivery message', redeliveryErr.message);
                                                 }
                                             } else {
-                                                Logger.warn(`Redelivery: Max attempts (${maxRetries}) reached for message`);
+                                                Logger.warn(`[RabbitMQ] Redelivery: Max attempts (${maxRetries}) reached for message`);
                                             }
+                                        } else if (redeliveryPattern && redeliveryPattern.retryValue && !isRedeliveryEnabled) {
+                                            // Redelivery configured but not enabled (plugin not available)
+                                            Logger.warn(
+                                                `[RabbitMQ] Redelivery pattern configured but DISABLED for queue '${queueName}' - ` +
+                                                `x-delayed-message plugin not available. Message will be sent to error queue.`
+                                            );
                                         }
 
                                         // Move to Error queue

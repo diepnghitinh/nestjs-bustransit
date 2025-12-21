@@ -11,7 +11,7 @@ import {ProcessPaymentConsumer} from "@infrastructure/messaging/sagas/ProcessPay
 import {ReserveInventoryConsumer} from "@infrastructure/messaging/sagas/ReserveInventoryConsumer";
 import {OrderRefundConsumer} from "@infrastructure/messaging/sagas/OrderRefundConsumer";
 import {OrderConfirmedConsumer} from "@infrastructure/messaging/sagas/OrderConfirmedConsumer";
-import {BusTransit} from "nestjs-bustransit";
+import { BusTransit } from 'nestjs-bustransit';
 
 const configService = new ConfigService();
 

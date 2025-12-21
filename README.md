@@ -2,6 +2,15 @@
 
 This is a powerful NestJS library designed to simplify the integration and management of a **Service Bus** in your applications, utilizing **RabbitMQ** as the message broker. This library particularly stands out for its implementation of the **Saga Pattern**, helping you reliably and consistently manage distributed transactions.
 
+## 📚 Documentation
+
+- **[📖 Complete Documentation Index](./DOCUMENTATION_INDEX.md)** - Find everything in one place
+- **[🚀 Routing Slips Quick Start](./ROUTING_SLIPS_QUICKSTART.md)** - Get started in 10 minutes
+- **[📘 Routing Slips Guide](./ROUTING_SLIPS.md)** - Full API reference
+- **[📕 Saga Compensation Guide](./COMPENSATION.md)** - Event-driven compensation
+- **[🔄 Pattern Comparison](./COMPENSATION_PATTERNS_COMPARISON.md)** - Choose the right pattern
+- **[⚙️ Retry Strategies](./RETRY_STRATEGIES.md)** - Handle failures gracefully
+
 ## Why Use This Library?
 
 In a microservices architecture, handling transactions that span across multiple services (distributed transactions) is a significant challenge. The Saga Pattern provides an effective solution for maintaining data consistency by orchestrating a sequence of local transactions, with the ability to roll back if any step fails.
@@ -10,6 +19,8 @@ This library offers:
 
 * **Easy NestJS Integration:** Leveraging NestJS features like dependency injection, decorators, and modules for seamless Service Bus configuration and usage.
 * **Saga Pattern Implementation:** Provides tools and structures to define, execute, and monitor Sagas, ensuring data consistency even when failures occur.
+* **Routing Slips Pattern:** Activity-based workflow coordination with automatic compensation for distributed transactions.
+* **Comprehensive Retry Strategies:** Four retry strategies (Immediate, Interval, Intervals, Exponential) at two levels (Retry + Redelivery).
 * **RabbitMQ Powered:** Utilizes RabbitMQ's performance and reliability as the message transport layer, supporting queuing, routing, and publish/subscribe.
 * **Scalability:** Designed to be easily extensible and customizable to meet specific project needs.
 * **Robust Error Handling:** Built-in error handling mechanisms help manage failure scenarios and trigger compensation steps within a Saga.
@@ -18,10 +29,17 @@ This library offers:
 
 ### Installation
 ```bash
-npm install nestjs-bustransit
+npm install nestjs-bustransit uuid
 # or
-yarn add nestjs-bustransit
+yarn add nestjs-bustransit uuid
 ```
+
+### Quick Links
+
+- **New to routing slips?** → [Quick Start Guide](./ROUTING_SLIPS_QUICKSTART.md)
+- **Want to compare patterns?** → [Pattern Comparison](./COMPENSATION_PATTERNS_COMPARISON.md)
+- **Need API reference?** → [Routing Slips Documentation](./ROUTING_SLIPS.md)
+- **Looking for something specific?** → [Documentation Index](./DOCUMENTATION_INDEX.md)
 
 # Roadmap
 - [x] RabbitMq Broker
@@ -29,6 +47,7 @@ yarn add nestjs-bustransit
 - [x] Retry Level 2 (Redelivery with all strategies)
 - [x] Saga pattern
 - [x] Saga compensation
+- [x] Routing slips pattern
 - [ ] Kafka broker
 
 # Retry Strategies
@@ -156,6 +175,52 @@ this.When(PaymentProcessed)
     })
     .TransitionTo(this.ReservingInventory)
 ```
+
+## Routing Slips Pattern
+The library implements the Routing Slips pattern for distributed transaction coordination based on [MassTransit's Routing Slips](https://masstransit.io/documentation/concepts/routing-slips). This provides an activity-based approach to orchestrating multi-service workflows with automatic compensation.
+
+**Key Features:**
+- **Activity-based coordination** - Reusable, self-contained processing units
+- **Automatic compensation** - Activities compensate in reverse order (LIFO) on failure
+- **Dynamic itineraries** - Build workflows at runtime based on conditions
+- **Rich event system** - Monitor execution with detailed events
+- **Variable passing** - Share data between activities seamlessly
+
+See the complete guide: [ROUTING_SLIPS.md](./ROUTING_SLIPS.md)
+
+Quick example:
+```typescript
+// Define an activity with compensation
+@Injectable()
+export class ProcessPaymentActivity implements IActivity<PaymentArgs, PaymentLog> {
+    name = 'ProcessPayment';
+
+    async execute(context: IExecuteContext<PaymentArgs>): Promise<IActivityResult> {
+        const paymentId = await this.processPayment(context.arguments);
+        return context.completedWithVariables(
+            new Map([['paymentId', paymentId]]),
+            { paymentId, amount: context.arguments.amount }
+        );
+    }
+
+    async compensate(context: ICompensateContext<PaymentLog>): Promise<void> {
+        await this.refundPayment(context.compensationLog.paymentId);
+    }
+}
+
+// Build and execute a routing slip
+const routingSlip = RoutingSlipBuilder.create('order-123')
+    .addActivity('ProcessPayment', 'payment-service', { orderId: 'order-123', amount: 99.99 })
+    .addActivity('ReserveInventory', 'inventory-service', { orderId: 'order-123', items: [...] })
+    .addActivity('SendConfirmation', 'notification-service', { email: 'customer@example.com' })
+    .build();
+
+await executor.execute(routingSlip);
+```
+
+**When to use Routing Slips vs Saga Compensation:**
+- **Routing Slips**: Multi-service workflows, dynamic orchestration, reusable activities
+- **Saga Compensation**: Complex state machines, long-running processes, event-driven flows
 
 Code configure
 ```javascript

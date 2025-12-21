@@ -3,7 +3,7 @@ import { v7 as uuidv7 } from 'uuid';
 import {OrderFailed, ProcessPayment} from "@shared/messages/message";
 import {IsNotEmpty} from "@nestjs/class-validator";
 import {PaymentProcessed} from "@infrastructure/messaging/sagas/OrderProcessingStateMachine";
-import {BusTransitConsumer, IPublishEndpoint, ISagaConsumeContext} from "nestjs-bustransit";
+import { BusTransitConsumer, IPublishEndpoint, ISagaConsumeContext } from "nestjs-bustransit";
 
 
 @Injectable()

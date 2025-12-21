@@ -1,7 +1,6 @@
 import {Controller, Inject, Injectable, Logger} from "@nestjs/common";
 import {IsNotEmpty} from "@nestjs/class-validator";
-import {BusTransitConsumer} from "nestjs-bustransit";
-import {IPublishEndpoint} from "nestjs-bustransit";
+import { BusTransitConsumer, IPublishEndpoint } from "nestjs-bustransit";
 
 export class OrderMessage {
     @IsNotEmpty()

@@ -277,3 +277,91 @@ this.When(SomeEvent)
     }
 })
 ```
+
+## Alternative Pattern: Routing Slips
+
+This library also supports the **Routing Slips** pattern for distributed transaction coordination. Routing slips provide an alternative approach to compensation with different trade-offs.
+
+### Saga Compensation vs Routing Slips
+
+| Aspect | Saga Compensation (This Pattern) | Routing Slips |
+|--------|--------------------------------|---------------|
+| **Pattern** | Event-driven state machine | Activity-based orchestration |
+| **Coupling** | Tight to saga workflow | Loose - reusable activities |
+| **Compensation** | Manual trigger via `Compensate(ctx)` | Automatic on activity fault |
+| **State** | Persistent saga state object | Routing slip document with variables |
+| **Best For** | Long-running business processes | Multi-service workflows |
+| **Reusability** | Low - compensations tied to saga | High - activities reused across workflows |
+
+### When to Use Saga Compensation
+
+✅ **Use Saga Compensation (this pattern) when**:
+- You need complex state management across multiple events
+- The process is long-running (hours, days, or weeks)
+- You have an event-driven architecture
+- You need to persist saga state between steps
+- The workflow has many conditional branches based on state
+
+**Example**: Order fulfillment with approval workflows, loan applications, insurance claims
+
+### When to Use Routing Slips
+
+✅ **Use Routing Slips when**:
+- You need to coordinate operations across multiple services
+- Activities should be reusable in different workflows
+- The workflow is short-lived (completes in one execution)
+- Compensation logic is clear and independent per step
+- You want to build workflows dynamically at runtime
+
+**Example**: Payment → Inventory → Shipping workflows, data pipelines, API orchestration
+
+### Quick Routing Slips Example
+
+```typescript
+// Define a reusable activity with compensation
+@Injectable()
+export class ProcessPaymentActivity implements IActivity<PaymentArgs, PaymentLog> {
+    name = 'ProcessPayment';
+
+    async execute(context: IExecuteContext<PaymentArgs>): Promise<IActivityResult> {
+        const paymentId = await this.processPayment(context.arguments);
+        return context.completedWithVariables(
+            new Map([['paymentIntentId', paymentId]]),
+            { paymentIntentId: paymentId, amount: context.arguments.amount }
+        );
+    }
+
+    async compensate(context: ICompensateContext<PaymentLog>): Promise<void> {
+        await this.refundPayment(context.compensationLog.paymentIntentId);
+    }
+}
+
+// Build and execute a routing slip
+const routingSlip = RoutingSlipBuilder.create('order-123')
+    .addActivity('ProcessPayment', 'payment-service', { amount: 99.99 })
+    .addActivity('ReserveInventory', 'inventory-service', { items: [...] })
+    .addActivity('SendConfirmation', 'email-service', { email: '...' })
+    .build();
+
+await executor.execute(routingSlip);
+// Automatic compensation on any activity fault!
+```
+
+### Learn More
+
+- **[Routing Slips Documentation](../ROUTING_SLIPS.md)** - Complete guide to the routing slips pattern
+- **[Routing Slips Concepts](../ROUTING_SLIPS_CONCEPTS.md)** - Deep dive into concepts and design
+- **[Pattern Comparison Guide](../COMPENSATION_PATTERNS_COMPARISON.md)** - Detailed comparison to help you choose
+
+## Summary
+
+**Saga Compensation** provides a powerful way to handle distributed transaction rollback in event-driven architectures:
+
+- ✅ Manual compensation trigger gives you full control
+- ✅ Rich state management for complex workflows
+- ✅ Perfect for long-running business processes
+- ✅ Event-driven architecture support
+
+For **simpler, short-lived workflows** with reusable components, consider using **Routing Slips** instead.
+
+Both patterns are available in this library and can coexist in the same application!

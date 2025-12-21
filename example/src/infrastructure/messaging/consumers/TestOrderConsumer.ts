@@ -1,5 +1,5 @@
 import {Controller, Inject, Injectable, Logger} from "@nestjs/common";
-import {BusTransitConsumer, IPublishEndpoint} from "nestjs-bustransit";
+import { BusTransitConsumer, IPublishEndpoint } from "nestjs-bustransit";
 
 class Message2 {
     Text: string;

@@ -4,7 +4,9 @@
       "Bash(npm run build:*)",
       "Bash(npm ls:*)",
       "Bash(npm install)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(ln:*)",
+      "Bash(find:*)"
     ]
   }
 }
