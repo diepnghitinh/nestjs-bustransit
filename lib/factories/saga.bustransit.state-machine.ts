@@ -9,7 +9,7 @@ import {IEventActivities} from "../interfaces/event.activities.interface";
 import {ISagaConsumeContext} from "../interfaces/saga.consumer.interface";
 import {IEventCorrelationConfigurator} from "../interfaces/event.correlation.configurator";
 import {EventCorrelationConfigurator} from "./event.correlation.configurator";
-import {SagaStateMachineInstance, ICompensationActivity} from "./saga.state-machine-instance";
+import {SagaStateMachineInstance} from "./saga.state-machine-instance";
 import {IEvent, IState} from "../interfaces/saga";
 import {bufferToStringJson, getLastPart} from "../utils/utils";
 
@@ -72,52 +72,6 @@ export class BusTransitStateMachine<TState extends object> extends BusTransitCon
         return this._workflow[whenClass.name]
     }
 
-    async Compensate<TMessage extends TState>(ctx: BehaviorContext<SagaStateMachineInstance, TMessage>): Promise<void> {
-        if (!ctx.Saga.CompensationActivities || ctx.Saga.CompensationActivities.length === 0) {
-            Logger.warn(`[SG] No compensation activities to execute for CorrelationId: ${ctx.Saga.CorrelationId}`);
-            return;
-        }
-
-        ctx.Saga.IsCompensating = true;
-        Logger.log(`[SG] Starting compensation for CorrelationId: ${ctx.Saga.CorrelationId}`);
-        Logger.log(`[SG] Compensating ${ctx.Saga.CompensationActivities.length} activities in reverse order`);
-
-        const activitiesToCompensate = [...ctx.Saga.CompensationActivities].reverse();
-
-        for (const activity of activitiesToCompensate) {
-            const currentState = this._workflow[activity.eventName] as EventActivityBinder<TState, any>;
-
-            if (!currentState) {
-                Logger.warn(`[SG] Cannot find event ${activity.eventName} for compensation`);
-                continue;
-            }
-
-            const compensationAction = currentState.getCompensationAction();
-
-            if (!compensationAction) {
-                Logger.warn(`[SG] No compensation action defined for ${activity.eventName}`);
-                continue;
-            }
-
-            try {
-                Logger.log(`[SG] Compensating: ${activity.eventName} from state ${activity.stateName}`);
-
-                if (activity.compensationData) {
-                    ctx.Message = activity.compensationData;
-                }
-
-                await compensationAction(ctx as any);
-                Logger.log(`[SG] Successfully compensated: ${activity.eventName}`);
-            } catch (error) {
-                Logger.error(`[SG] Failed to compensate ${activity.eventName}: ${error.message}`);
-                throw error;
-            }
-        }
-
-        ctx.Saga.CompensationActivities = [];
-        ctx.Saga.IsCompensating = false;
-        Logger.log(`[SG] Compensation completed for CorrelationId: ${ctx.Saga.CorrelationId}`);
-    }
 
     async Consume<TMessage extends TState>(ctx: BehaviorContext<SagaStateMachineInstance, TMessage>, context: ISagaConsumeContext<TState, TMessage>): Promise<any> {
         await super.Consume(ctx, context);
@@ -144,10 +98,6 @@ export class BusTransitStateMachine<TState extends object> extends BusTransitCon
             ctx.Saga.CurrentState = this.StateInitially.Name;
         }
 
-        if (!ctx.Saga.CompensationActivities) {
-            ctx.Saga.CompensationActivities = [];
-        }
-
         Logger.log(`[SG] ****** Receive Event: ` + receiveEvent + ', CorrelationId: ' + ctx.Saga.CorrelationId);
         //Logger.log(`[SG] SagaState current: ${ctx.Saga.CurrentState} , msg: ${JSON.stringify(this.sagaStore[ctx.Saga.CorrelationId])}`)
         Logger.log(`[SG] SagaState current: ${ctx.Saga.CurrentState} , msg: ${JSON.stringify(ctx.Saga)}`)
@@ -172,18 +122,6 @@ export class BusTransitStateMachine<TState extends object> extends BusTransitCon
             ctx.producerClient = super.producer;
             const msg = await currentState.publishAsync(ctx as any)
             getResult = await ctx.producerClient.Send(msg, ctx);
-        }
-
-        // Track compensation activity if compensation is defined
-        if (currentState.getCompensationAction() && !ctx.Saga.IsCompensating) {
-            const compensationActivity: ICompensationActivity = {
-                eventName: receiveEvent,
-                stateName: ctx.Saga.CurrentState,
-                compensationData: ctx.Message,
-                timestamp: new Date()
-            };
-            ctx.Saga.CompensationActivities.push(compensationActivity);
-            Logger.verbose(`[SG] Tracked compensation activity for ${receiveEvent}`);
         }
 
         // console.log('Node ' + process.env.PORT)

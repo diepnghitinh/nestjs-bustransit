@@ -15,7 +15,6 @@ export class EventActivityBinder<TState extends object, TEvent> implements IEven
     public publishAsync: (c: IBehaviorContext<TState, TEvent>) => any;
     public transitionTo: SagaState<any>;
     public finalize: any;
-    public compensationAction: (c: IBehaviorContext<TState, TEvent>) => void | Promise<void>;
 
     constructor(whenClass: { new(...args: any[]): TEvent }) {
         this.eventClass = whenClass;
@@ -44,21 +43,12 @@ export class EventActivityBinder<TState extends object, TEvent> implements IEven
         return this;
     }
 
-    Compensate(c: (c: IBehaviorContext<TState, TEvent>) => void | Promise<void>): IEventActivityBinder<TState, TEvent> {
-        this.compensationAction = c;
-        return this;
-    }
-
     addPreviousState(state: IState) {
         this.previousStates[(state as SagaState<any>).Name] = state;
     }
 
     getEventClass() {
         return this.eventClass;
-    }
-
-    getCompensationAction() {
-        return this.compensationAction;
     }
 
     setStateClass(stateClass: BusTransitStateMachine<any>) {
