@@ -4,7 +4,7 @@
  */
 
 import { Injectable, Logger } from '@nestjs/common';
-import { IActivity, IActivityResult, ICompensateContext, IExecuteContext } from 'nestjs-bustransit';
+import { IActivity, IActivityResult, ICompensateContext, IExecuteContext, RoutingSlipActivity } from 'nestjs-bustransit';
 
 /**
  * Arguments for ReserveInventory activity
@@ -26,6 +26,7 @@ export interface ReserveInventoryLog {
 /**
  * Activity to reserve inventory for an order
  */
+@RoutingSlipActivity({ name: 'ReserveInventory' })
 @Injectable()
 export class ReserveInventoryActivity implements IActivity<ReserveInventoryArguments, ReserveInventoryLog> {
     name = 'ReserveInventory';

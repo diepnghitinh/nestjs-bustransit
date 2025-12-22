@@ -7,3 +7,4 @@ export * from './message.context.interface';
 export * from './routing-slip.interface';
 export * from './activity.interface';
 export * from './routing-slip.events';
+export * from './routing-slip-messages.interface';

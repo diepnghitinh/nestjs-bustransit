@@ -4,7 +4,7 @@
  */
 
 import { Injectable, Logger } from '@nestjs/common';
-import { IActivityResult, IExecuteActivity, IExecuteContext } from 'nestjs-bustransit';
+import { IActivityResult, IExecuteActivity, IExecuteContext, RoutingSlipActivity } from 'nestjs-bustransit';
 
 /**
  * Arguments for SendConfirmation activity
@@ -18,6 +18,7 @@ export interface SendConfirmationArguments {
  * Activity to send order confirmation email
  * This is an execute-only activity - emails cannot be "unsent"
  */
+@RoutingSlipActivity({ name: 'SendConfirmation' })
 @Injectable()
 export class SendConfirmationActivity implements IExecuteActivity<SendConfirmationArguments> {
     name = 'SendConfirmation';

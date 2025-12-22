@@ -57,4 +57,37 @@ export class AppController {
       };
     }
   }
+
+  /**
+   * Demo endpoint for Routing Slips Compensation pattern
+   *
+   * This endpoint demonstrates automatic compensation (rollback) when an activity fails.
+   *
+   * The routing slip will execute activities until ValidateInventory fails:
+   * 1. ProcessPayment - Processes payment ✓
+   * 2. ReserveInventory - Reserves inventory ✓
+   * 3. ValidateInventory - Fails intentionally ✗
+   *
+   * When ValidateInventory fails, the routing slip automatically compensates
+   * (undoes) all previously completed activities in reverse order (LIFO):
+   * - Compensate ReserveInventory (release inventory)
+   * - Compensate ProcessPayment (refund payment)
+   *
+   * Check the logs to see the compensation sequence in action.
+   *
+   * @returns Object showing the failure and compensation details
+   */
+  @Get('test-routing-slip-compensation')
+  async routingSlipCompensationTest(): Promise<any> {
+    try {
+      const result = await this.appService.testRoutingSlipCompensation();
+      return result;
+    } catch (e) {
+      return {
+        success: false,
+        message: "Routing slip compensation test failed",
+        error: e.message
+      };
+    }
+  }
 }

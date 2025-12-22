@@ -4,7 +4,7 @@
  */
 
 import { Injectable, Logger } from '@nestjs/common';
-import { IActivity, IActivityResult, ICompensateContext, IExecuteContext } from 'nestjs-bustransit';
+import { IActivity, IActivityResult, ICompensateContext, IExecuteContext, RoutingSlipActivity } from 'nestjs-bustransit';
 
 /**
  * Arguments for ProcessPayment activity
@@ -27,6 +27,7 @@ export interface ProcessPaymentLog {
 /**
  * Activity to process payment for an order
  */
+@RoutingSlipActivity({ name: 'ProcessPayment' })
 @Injectable()
 export class ProcessPaymentActivity implements IActivity<ProcessPaymentArguments, ProcessPaymentLog> {
     name = 'ProcessPayment';

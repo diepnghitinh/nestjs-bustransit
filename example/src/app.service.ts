@@ -65,4 +65,40 @@ export class AppService {
       };
     }
   }
+
+  /**
+   * Test Routing Slips compensation pattern
+   * Demonstrates: automatic compensation (rollback) when an activity fails
+   */
+  async testRoutingSlipCompensation(): Promise<any> {
+    const orderId = uuidv7();
+
+    try {
+      await this.orderProcessingService.processOrderWithFailure(
+        orderId,
+        199.99,
+        'customer_123',
+        'customer@example.com',
+        [
+          { sku: 'PROD-001', quantity: 2 },
+          { sku: 'PROD-002', quantity: 1 }
+        ]
+      );
+
+      return {
+        success: true,
+        message: 'This should not happen - activity was supposed to fail',
+        orderId
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: 'Routing slip failed as expected - compensation executed',
+        orderId,
+        error: error.message,
+        compensatedActivities: ['ReserveInventory', 'ProcessPayment'],
+        note: 'Check the logs to see the compensation in action (activities are undone in reverse order)'
+      };
+    }
+  }
 }

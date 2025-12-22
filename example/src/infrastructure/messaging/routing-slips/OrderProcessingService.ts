@@ -4,21 +4,16 @@
  */
 
 import { Injectable, Logger } from '@nestjs/common';
-import { OrderActivityFactory } from './OrderActivityFactory';
-import { IRoutingSlipEventSubscriber, RoutingSlipBuilder, RoutingSlipExecutor } from 'nestjs-bustransit';
+import { RoutingSlipService, IRoutingSlipEventSubscriber } from 'nestjs-bustransit';
 
 /**
  * Service to process orders using routing slips
  */
 @Injectable()
 export class OrderProcessingService {
-    private executor: RoutingSlipExecutor;
-
-    constructor(private readonly activityFactory: OrderActivityFactory) {
-        this.executor = new RoutingSlipExecutor(this.activityFactory);
-
+    constructor(private readonly routingSlipService: RoutingSlipService) {
         // Subscribe to routing slip events
-        this.executor.subscribe(this.createEventSubscriber());
+        this.routingSlipService.subscribe(this.createEventSubscriber());
     }
 
     /**
@@ -28,8 +23,8 @@ export class OrderProcessingService {
         Logger.log(`[OrderProcessing] Starting order processing: ${orderId}`);
 
         try {
-            // Build the routing slip
-            const routingSlip = RoutingSlipBuilder.create(orderId)
+            // Build the routing slip using the service
+            const routingSlip = this.routingSlipService.createBuilder(orderId)
                 .addActivity('ProcessPayment', 'payment-service', {
                     orderId,
                     amount,
@@ -50,12 +45,59 @@ export class OrderProcessingService {
             Logger.log(`[OrderProcessing] Routing slip created: ${routingSlip.trackingNumber}`);
 
             // Execute the routing slip
-            await this.executor.execute(routingSlip);
+            await this.routingSlipService.execute(routingSlip);
 
             Logger.log(`[OrderProcessing] Order processed successfully: ${orderId}`);
 
         } catch (error) {
             Logger.error(`[OrderProcessing] Order processing failed: ${orderId} - ${error.message}`);
+            throw error;
+        }
+    }
+
+    /**
+     * Process an order with validation that will fail to demonstrate compensation
+     */
+    async processOrderWithFailure(orderId: string, amount: number, customerId: string, customerEmail: string, items: any[]): Promise<void> {
+        Logger.log(`[OrderProcessing] Starting order processing with intentional failure: ${orderId}`);
+        Logger.log(`[OrderProcessing] This will demonstrate automatic compensation (rollback)`);
+
+        try {
+            // Build the routing slip with a failing activity
+            const routingSlip = this.routingSlipService.createBuilder(orderId)
+                .addActivity('ProcessPayment', 'payment-service', {
+                    orderId,
+                    amount,
+                    customerId
+                })
+                .addActivity('ReserveInventory', 'inventory-service', {
+                    orderId,
+                    items
+                })
+                // This activity will fail, triggering compensation of previous activities
+                .addActivity('ValidateInventory', 'validation-service', {
+                    orderId,
+                    items,
+                    shouldFail: true // Intentionally fail to demonstrate compensation
+                })
+                .addActivity('SendConfirmation', 'notification-service', {
+                    orderId,
+                    customerEmail
+                })
+                .addVariable('orderId', orderId)
+                .addVariable('customerEmail', customerEmail)
+                .build();
+
+            Logger.log(`[OrderProcessing] Routing slip created: ${routingSlip.trackingNumber}`);
+
+            // Execute the routing slip
+            await this.routingSlipService.execute(routingSlip);
+
+            Logger.log(`[OrderProcessing] Order processed successfully: ${orderId}`);
+
+        } catch (error) {
+            Logger.error(`[OrderProcessing] Order processing failed: ${orderId} - ${error.message}`);
+            Logger.log(`[OrderProcessing] Compensation should have been triggered for all completed activities`);
             throw error;
         }
     }
