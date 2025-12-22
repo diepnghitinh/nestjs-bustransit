@@ -103,6 +103,56 @@ export class OrderProcessingService {
     }
 
     /**
+     * Process an order with configurable failure rate to demonstrate random failures
+     */
+    async processOrderWithFailureRate(
+        orderId: string,
+        amount: number,
+        customerId: string,
+        customerEmail: string,
+        items: any[],
+        failureRate: number
+    ): Promise<void> {
+        Logger.log(`[OrderProcessing] Starting order processing with ${failureRate}% failure rate: ${orderId}`);
+        Logger.log(`[OrderProcessing] This will randomly fail to demonstrate automatic compensation`);
+
+        try {
+            // Build the routing slip with SendConfirmation that may fail based on rate
+            const routingSlip = this.routingSlipService.createBuilder(orderId)
+                .addActivity('ProcessPayment', 'payment-service', {
+                    orderId,
+                    amount,
+                    customerId
+                })
+                .addActivity('ReserveInventory', 'inventory-service', {
+                    orderId,
+                    items
+                })
+                .addActivity('SendConfirmation', 'notification-service', {
+                    orderId,
+                    customerEmail,
+                    failureRate // Pass failure rate to activity
+                })
+                .addVariable('orderId', orderId)
+                .addVariable('customerEmail', customerEmail)
+                .addVariable('failureRate', failureRate)
+                .build();
+
+            Logger.log(`[OrderProcessing] Routing slip created: ${routingSlip.trackingNumber}`);
+
+            // Execute the routing slip
+            await this.routingSlipService.execute(routingSlip);
+
+            Logger.log(`[OrderProcessing] ✅ Order processed successfully: ${orderId} (no failure occurred)`);
+
+        } catch (error) {
+            Logger.error(`[OrderProcessing] ❌ Order processing failed: ${orderId} - ${error.message}`);
+            Logger.log(`[OrderProcessing] 🔄 Compensation triggered for all completed activities (payment refunded, inventory released)`);
+            throw error;
+        }
+    }
+
+    /**
      * Create event subscriber for monitoring
      */
     private createEventSubscriber(): IRoutingSlipEventSubscriber {

@@ -7,6 +7,7 @@ Complete documentation for the NestJS BusTransit library - a powerful service bu
 ### Getting Started
 - [Main README](./README.md) - Overview, installation, and quick start
 - [Quick Start Guide](#quick-start-below) - Get up and running in 5 minutes
+- [Setup Guide](./ROUTING_SLIPS_SETUP.md) - Installation and configuration details
 
 ### Patterns and Features
 
@@ -39,13 +40,6 @@ Complete documentation for the NestJS BusTransit library - a powerful service bu
   - End-to-end examples (success and failure scenarios)
   - Design patterns and architecture
 
-- **[Pattern Comparison Guide](./COMPENSATION_PATTERNS_COMPARISON.md)** - Choose the right pattern
-  - Saga Compensation vs Routing Slips
-  - Detailed comparison tables
-  - When to use each pattern
-  - Code examples side-by-side
-  - Migration guides
-  - Decision tree
 
 ### Technical Documentation
 - **[Routing Slips Implementation Summary](./ROUTING_SLIPS_IMPLEMENTATION_SUMMARY.md)** - Technical details
@@ -155,7 +149,6 @@ await executor.execute(routingSlip);
 |-------|----------|----------|
 | **Saga Compensation** | [COMPENSATION.md](./COMPENSATION.md) | Long-running processes, event-driven flows, complex state machines |
 | **Routing Slips** | [ROUTING_SLIPS.md](./ROUTING_SLIPS.md) | Multi-service workflows, reusable activities, dynamic orchestration |
-| **Pattern Comparison** | [COMPENSATION_PATTERNS_COMPARISON.md](./COMPENSATION_PATTERNS_COMPARISON.md) | Choosing between patterns |
 
 ### Resilience and Reliability
 
@@ -190,7 +183,6 @@ await executor.execute(routingSlip);
 
 #### Learn Patterns
 - **What is a routing slip?** → [Routing Slips Concepts](./ROUTING_SLIPS_CONCEPTS.md)
-- **Saga vs Routing Slips** → [Pattern Comparison](./COMPENSATION_PATTERNS_COMPARISON.md)
 - **Best practices** → [Routing Slips - Best Practices](./ROUTING_SLIPS.md#best-practices)
 - **Design patterns** → [Routing Slips Concepts - Design Patterns](./ROUTING_SLIPS_CONCEPTS.md#key-design-patterns)
 
@@ -258,7 +250,6 @@ await executor.execute(routingSlip);
 
 **Why**: Complex business logic, long-running, state-dependent decisions
 
-**See**: [Pattern Comparison - When to Use Saga](./COMPENSATION_PATTERNS_COMPARISON.md#use-saga-compensation-when)
 
 ## 🌟 Feature Matrix
 
@@ -290,6 +281,3 @@ await executor.execute(routingSlip);
 
 See the main [README](./README.md) for license information.
 
----
-
-**Need help choosing a pattern?** Check the [Pattern Comparison Guide](./COMPENSATION_PATTERNS_COMPARISON.md) with decision trees and detailed comparisons!

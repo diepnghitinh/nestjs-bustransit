@@ -24,7 +24,10 @@
       "Bash(ls:*)",
       "Bash(grep:*)",
       "Bash(npm test:*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(for i in {1..5})",
+      "Bash(do echo \"=== Attempt $i ===\")",
+      "Bash(done)"
     ],
     "deny": [],
     "ask": []

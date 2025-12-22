@@ -485,7 +485,6 @@ this.executor.subscribe({
 
 - **[Full Documentation](./ROUTING_SLIPS.md)** - Complete API reference and advanced features
 - **[Concepts Guide](./ROUTING_SLIPS_CONCEPTS.md)** - Deep dive into the pattern
-- **[Pattern Comparison](./COMPENSATION_PATTERNS_COMPARISON.md)** - Compare with Saga Compensation
 - **[Examples](./ROUTING_SLIPS_IMPLEMENTATION_SUMMARY.md)** - More complete examples
 
 ## Common Patterns

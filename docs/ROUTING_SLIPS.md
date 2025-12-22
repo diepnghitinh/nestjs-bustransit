@@ -5,7 +5,6 @@ This library implements the **Routing Slips Pattern** for distributed transactio
 ## Quick Links
 
 - 📖 **[Routing Slips Concepts](./ROUTING_SLIPS_CONCEPTS.md)** - Deep dive into the pattern, design, and how it works
-- 🔄 **[Pattern Comparison Guide](./COMPENSATION_PATTERNS_COMPARISON.md)** - Compare routing slips vs saga compensation
 - 📚 **[Saga Compensation](./COMPENSATION.md)** - Alternative event-driven compensation pattern
 
 ## Overview
@@ -540,13 +539,6 @@ const routingSlip = RoutingSlipBuilder.create()
   - End-to-end examples with success and failure scenarios
   - Design patterns and best practices
 
-- 🔄 **[Pattern Comparison Guide](./COMPENSATION_PATTERNS_COMPARISON.md)** - Detailed comparison
-  - Saga Compensation vs Routing Slips
-  - When to use each pattern
-  - Architecture comparison
-  - Code examples side-by-side
-  - Migration guides
-  - Decision tree to help you choose
 
 - 📚 **[Saga Compensation Pattern](./COMPENSATION.md)** - Alternative pattern
   - Event-driven compensation in sagas

@@ -101,4 +101,46 @@ export class AppService {
       };
     }
   }
+
+  /**
+   * Test Routing Slips with configurable failure rate
+   * Demonstrates: random failures and automatic compensation
+   */
+  async testRoutingSlipFailureRate(failureRate: number): Promise<any> {
+    const orderId = uuidv7();
+
+    try {
+      await this.orderProcessingService.processOrderWithFailureRate(
+        orderId,
+        199.99,
+        'customer_123',
+        'customer@example.com',
+        [
+          { sku: 'PROD-001', quantity: 2 },
+          { sku: 'PROD-002', quantity: 1 }
+        ],
+        failureRate
+      );
+
+      return {
+        success: true,
+        message: 'Routing slip executed successfully - no failure occurred',
+        orderId,
+        failureRate,
+        activities: ['ProcessPayment', 'ReserveInventory', 'SendConfirmation'],
+        note: 'Try calling again to trigger the failure (random based on failure rate)'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: 'Routing slip failed - automatic compensation executed',
+        orderId,
+        failureRate,
+        error: error.message,
+        failedActivity: 'SendConfirmation',
+        compensatedActivities: ['ReserveInventory', 'ProcessPayment'],
+        note: 'Check the logs to see the failure and compensation sequence'
+      };
+    }
+  }
 }

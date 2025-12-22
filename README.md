@@ -1,15 +1,15 @@
-# NestJs Service Bus
+# NestJS Service Bus
 
-This is a powerful NestJS library designed to simplify the integration and management of a **Service Bus** in your applications, utilizing **RabbitMQ** as the message broker. This library particularly stands out for its implementation of the **Saga Pattern**, helping you reliably and consistently manage distributed transactions.
+A powerful NestJS library for building reliable distributed systems with **RabbitMQ**. Simplifies message-based communication with support for the **Saga Pattern**, **Routing Slips**, and comprehensive **Retry Strategies** for managing distributed transactions.
 
 ## 📚 Documentation
 
-- **[📖 Complete Documentation Index](./DOCUMENTATION_INDEX.md)** - Find everything in one place
-- **[🚀 Routing Slips Quick Start](./ROUTING_SLIPS_QUICKSTART.md)** - Get started in 10 minutes
-- **[📘 Routing Slips Guide](./ROUTING_SLIPS.md)** - Full API reference
-- **[📕 Saga Compensation Guide](./COMPENSATION.md)** - Event-driven compensation
-- **[🔄 Pattern Comparison](./COMPENSATION_PATTERNS_COMPARISON.md)** - Choose the right pattern
-- **[⚙️ Retry Strategies](./RETRY_STRATEGIES.md)** - Handle failures gracefully
+- **[📖 Complete Documentation Index](./docs/DOCUMENTATION_INDEX.md)** - Find everything in one place
+- **[🛠️ Setup Guide](./docs/ROUTING_SLIPS_SETUP.md)** - Installation and configuration details
+- **[📘 Routing Slips Guide](./docs/ROUTING_SLIPS.md)** - Activity-based workflow orchestration
+- **[📕 Saga Compensation Guide](./docs/COMPENSATION.md)** - Event-driven state machine compensation
+- **[⚙️ Retry Strategies](./docs/RETRY_STRATEGIES.md)** - Handle failures gracefully
+- **[👨‍💻 Code Examples](./example/src/infrastructure/messaging/)** - Full working examples
 
 ## Why Use This Library?
 
@@ -34,14 +34,7 @@ npm install nestjs-bustransit uuid
 yarn add nestjs-bustransit uuid
 ```
 
-### Quick Links
-
-- **New to routing slips?** → [Quick Start Guide](./ROUTING_SLIPS_QUICKSTART.md)
-- **Want to compare patterns?** → [Pattern Comparison](./COMPENSATION_PATTERNS_COMPARISON.md)
-- **Need API reference?** → [Routing Slips Documentation](./ROUTING_SLIPS.md)
-- **Looking for something specific?** → [Documentation Index](./DOCUMENTATION_INDEX.md)
-
-# Roadmap
+## Roadmap
 - [x] RabbitMq Broker
 - [x] Retry Level 1 (Immediate, Interval, Intervals, Exponential)
 - [x] Retry Level 2 (Redelivery with all strategies)
@@ -50,237 +43,71 @@ yarn add nestjs-bustransit uuid
 - [x] Routing slips pattern
 - [ ] Kafka broker
 
-# Retry Strategies
+## Core Features
 
-This library provides comprehensive retry mechanisms with 4 different strategies:
+### 🔄 Retry Strategies
 
-1. **Immediate**: Retry immediately without delay
-2. **Interval**: Retry with fixed delay between attempts
-3. **Intervals**: Retry with custom delays for each attempt
-4. **Exponential**: Retry with exponentially increasing delays (recommended for production)
+Comprehensive retry mechanisms with **4 strategies** (Immediate, Interval, Intervals, Exponential) at **2 levels** (Retry + Redelivery). Handle transient failures gracefully with automatic backoff and requeuing.
 
-Each strategy can be used for both:
-- **Level 1 (Retry)**: In-memory immediate retries
-- **Level 2 (Redelivery)**: Message requeue with delays using RabbitMQ delayed exchange
+**[→ Read the Retry Strategies Guide](./docs/RETRY_STRATEGIES.md)**
 
-See the complete guide: [RETRY_STRATEGIES.md](./RETRY_STRATEGIES.md)
+### 📨 Consumer & Producer Configuration
 
-Quick example:
+Easy setup for message consumers and producers with NestJS dependency injection. Configure endpoints, prefetch counts, and retry policies with a fluent API.
+
+**[→ See Configuration Examples](./example/src/infrastructure/messaging/)**
+
 ```typescript
-cfg.ReceiveEndpoint("my-queue", e => {
-    e.ConfigureConsumer(MyConsumer, context, c => {
-        // Level 1: Fast immediate retries
-        c.UseMessageRetry(r => r.Immediate(3));
-
-        // Level 2: Exponential backoff redelivery
-        c.UseRedelivery(r => r.Exponential(5, 5000, 2));
-        // Delays: 5s, 10s, 20s, 40s, 80s
+// Configure consumers and retry policies
+x.AddConsumer(SubmitOrderConsumer);
+x.UsingRabbitMq('my-app', (context, cfg) => {
+    cfg.ReceiveEndpoint("orders-queue", e => {
+        e.ConfigureConsumer(SubmitOrderConsumer, context, c => {
+            c.UseMessageRetry(r => r.Immediate(5));
+            c.UseRedelivery(r => r.Exponential(5, 5000, 2));
+        });
     });
 });
 ```
 
-# Consumer configure
-```javascript
-@Global()
-@Module({
-    imports: [
-        BusTransit.AddBusTransit.Setup((x) => {
+### 🎭 Saga Pattern & Compensation
 
-            x.AddConsumer(SubmitOrderConsumer,);
-
-            x.UsingRabbitMq(configService.get('APP_NAME'), (context, cfg) =>
-            {
-                cfg.Host(configService.get('RMQ_HOST'), configService.get('RMQ_VHOST'), (h) =>
-                {
-                    h.Username(configService.get('RMQ_USERNAME'));
-                    h.Password(configService.get('RMQ_PASSWORD'));
-                });
-
-                cfg.ReceiveEndpoint("regular-orders-1", e => {
-                    e.PrefetchCount = 30;
-                    e.ConfigureConsumer(SubmitOrderConsumer, context, c => {
-                        c.UseMessageRetry(r => r.Immediate(5)); // Retry 5 times immediately
-                        c.UseRedelivery(r => r.Exponential(5, 5000, 2)); // Exponential backoff
-                    });
-                });
-
-            })
-        }),
-    ],
-    controllers: [],
-    providers: [],
-})
-export class MessagingInfrastructureModule {}
-```
-
-To use a Producer instance, inject it into the Consumer constructor with the IPublishEndpoint interface.
-```javascript
-export class OrderMessage {
-    @IsNotEmpty()
-    Text: string;
-}
-
-@Injectable()
-export class SubmitOrderConsumer extends BusTransitConsumer<OrderMessage> {
-
-    constructor(
-        @Inject(IPublishEndpoint)
-        private readonly publishEndpoint: IPublishEndpoint,
-    ) {
-        super(OrderMessage);
-    }
-
-    async Consume(ctx, context) {
-        await super.Consume(ctx, context)
-        Logger.debug('SubmitOrderConsumer receive')
-
-        // Active a Saga flow
-        const rs = await this.publishEndpoint.Send<OrderSubmitted>(new OrderSubmitted(
-            {
-                OrderId: uuidv7(),
-                Total: 10000,
-                Email: 'test@gmail.com'
-            }
-        ), null);
-
-        console.log(context.Message);
-        console.log(rs);
-    }
-}
-```
-
-# Saga Configure
-See details <a href="https://github.com/diepnghitinh/nestjs-bustransit/tree/main/example/src/infrastructure/messaging/sagas" target="_blank">saga consumer</a> & Workflow
-
-![Saga](./docs/saga.png)
-
-## Saga Compensation Pattern
-The library now supports automatic compensation for failed sagas. Define compensation actions for each step, and they'll automatically execute in reverse order when a failure occurs.
-
-See the complete guide: [COMPENSATION.md](./COMPENSATION.md)
-
-Quick example:
-```typescript
-this.When(PaymentProcessed)
-    .Then(c => {
-        c.Saga.PaymentIntentId = c.Message.PaymentIntentId;
-    })
-    .PublishAsync<ReserveInventory>(ReserveInventory, c => {
-        // Forward transaction
-        return new ReserveInventory();
-    })
-    .Compensate(async c => {
-        // Compensation transaction - refund the payment
-        await refundPayment(c.Saga.PaymentIntentId);
-    })
-    .TransitionTo(this.ReservingInventory)
-```
-
-## Routing Slips Pattern
-The library implements the Routing Slips pattern for distributed transaction coordination based on [MassTransit's Routing Slips](https://masstransit.io/documentation/concepts/routing-slips). This provides an activity-based approach to orchestrating multi-service workflows with automatic compensation.
+Event-driven state machines with automatic compensation. Build complex workflows that maintain data consistency across distributed services. Define compensating actions that execute in reverse order when failures occur.
 
 **Key Features:**
-- **Activity-based coordination** - Reusable, self-contained processing units
-- **Automatic compensation** - Activities compensate in reverse order (LIFO) on failure
-- **Dynamic itineraries** - Build workflows at runtime based on conditions
-- **Rich event system** - Monitor execution with detailed events
-- **Variable passing** - Share data between activities seamlessly
+- State machine orchestration
+- Event-driven transitions
+- Automatic LIFO compensation
+- Long-running process support
 
-See the complete guide: [ROUTING_SLIPS.md](./ROUTING_SLIPS.md)
+**[→ Read the Saga Compensation Guide](./docs/COMPENSATION.md)**
+**[→ View Saga Examples](./example/src/infrastructure/messaging/sagas/)**
 
-Quick example:
-```typescript
-// Define an activity with compensation
-@Injectable()
-export class ProcessPaymentActivity implements IActivity<PaymentArgs, PaymentLog> {
-    name = 'ProcessPayment';
+![Saga Workflow](./docs/saga.png)
 
-    async execute(context: IExecuteContext<PaymentArgs>): Promise<IActivityResult> {
-        const paymentId = await this.processPayment(context.arguments);
-        return context.completedWithVariables(
-            new Map([['paymentId', paymentId]]),
-            { paymentId, amount: context.arguments.amount }
-        );
-    }
+### 📋 Routing Slips Pattern
 
-    async compensate(context: ICompensateContext<PaymentLog>): Promise<void> {
-        await this.refundPayment(context.compensationLog.paymentId);
-    }
-}
+Activity-based workflow orchestration inspired by [MassTransit's Routing Slips](https://masstransit.io/documentation/concepts/routing-slips). Build dynamic, multi-service workflows with reusable activities and automatic compensation.
 
-// Build and execute a routing slip
-const routingSlip = RoutingSlipBuilder.create('order-123')
-    .addActivity('ProcessPayment', 'payment-service', { orderId: 'order-123', amount: 99.99 })
-    .addActivity('ReserveInventory', 'inventory-service', { orderId: 'order-123', items: [...] })
-    .addActivity('SendConfirmation', 'notification-service', { email: 'customer@example.com' })
-    .build();
+**Key Features:**
+- Reusable activity components
+- Dynamic runtime itineraries
+- Automatic LIFO compensation
+- Rich event system (Completed, Faulted, ActivityCompleted, etc.)
+- Variable passing between activities
 
-await executor.execute(routingSlip);
-```
+**[→ Read the Routing Slips Guide](./docs/ROUTING_SLIPS.md)**
+**[→ Quick Start Tutorial](./docs/ROUTING_SLIPS_QUICKSTART.md)**
+**[→ View Routing Slip Examples](./example/src/infrastructure/messaging/routing-slips/)**
 
-**When to use Routing Slips vs Saga Compensation:**
+**When to use:**
 - **Routing Slips**: Multi-service workflows, dynamic orchestration, reusable activities
 - **Saga Compensation**: Complex state machines, long-running processes, event-driven flows
 
-Code configure
-```javascript
-@Global()
-@Module({
-    imports: [
-        BusTransit.AddBusTransit.setUp((x) => {
+## Contributing
 
-            x.AddConsumer(ProcessPaymentConsumer,).Endpoint(e => {
-                e.Name = "saga-process-payment"
-            });
-            x.AddConsumer(ReserveInventoryConsumer,).Endpoint(e => {
-                e.Name = "saga-reserve-inventory"
-            });
-            x.AddConsumer(OrderConfirmedConsumer,).Endpoint(e => {
-                e.Name = "saga-order-confirmed"
-            });
-            x.AddConsumer(OrderRefundConsumer,).Endpoint(e => {
-                e.Name = "saga-order-refund"
-            });
+Contributions are welcome! Please feel free to submit a Pull Request.
 
-            x.AddSagaStateMachine(OrderStateMachine, OrderState);
+## License
 
-            x.UsingRabbitMq(configService.get('APP_NAME'), (context, cfg) =>
-            {
-                cfg.PrefetchCount = 50;
-
-                cfg.Host(configService.get('RMQ_HOST'), configService.get('RMQ_VHOST'), (h) =>
-                {
-                    h.Username(configService.get('RMQ_USERNAME'));
-                    h.Password(configService.get('RMQ_PASSWORD'));
-                });
-
-                // Others services saga
-                cfg.ReceiveEndpoint("saga-process-payment", e => {
-                    e.ConfigureConsumer(ProcessPaymentConsumer, context, c => {
-                    });
-                });
-
-                cfg.ReceiveEndpoint("saga-reserve-inventory", e => {
-                    e.ConfigureConsumer(ReserveInventoryConsumer, context, c => {
-                    });
-                });
-
-                cfg.ReceiveEndpoint("saga-order-confirmed", e => {
-                    e.ConfigureConsumer(OrderConfirmedConsumer, context, c => {
-                    });
-                });
-
-                cfg.ReceiveEndpoint("saga-order-refund", e => {
-                    e.ConfigureConsumer(OrderRefundConsumer, context, c => {
-                    });
-                });
-            })
-        })
-    ],
-    controllers: [
-    ],
-    providers: [
-    ],
-})
-export class MessagingInfrastructureModule {}
-```
+This project is licensed under the MIT License.

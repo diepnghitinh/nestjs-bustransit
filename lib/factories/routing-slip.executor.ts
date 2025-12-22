@@ -142,7 +142,8 @@ export class RoutingSlipExecutor {
                             activityExceptions: routingSlip.activityExceptions
                         });
 
-                        return;
+                        // Throw error to propagate failure
+                        throw new Error(result.exception?.message || 'Routing slip execution failed');
 
                     } else if (result.resultType === ActivityResultType.Terminate) {
                         // Graceful termination

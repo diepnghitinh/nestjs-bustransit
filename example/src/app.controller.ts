@@ -1,4 +1,4 @@
-import {Controller, Get, Inject} from '@nestjs/common';
+import {Controller, Get, Inject, Query} from '@nestjs/common';
 import { AppService } from './app.service';
 
 @Controller()
@@ -86,6 +86,48 @@ export class AppController {
       return {
         success: false,
         message: "Routing slip compensation test failed",
+        error: e.message
+      };
+    }
+  }
+
+  /**
+   * Demo endpoint for Routing Slips with Simulated Failure Rate
+   *
+   * This endpoint demonstrates compensation when SendConfirmation activity fails randomly.
+   *
+   * Example usage:
+   * - GET /test-routing-slip-failure-rate?rate=50  (50% chance of failure)
+   * - GET /test-routing-slip-failure-rate?rate=100 (always fails)
+   * - GET /test-routing-slip-failure-rate?rate=0   (never fails, same as success test)
+   *
+   * The routing slip will execute:
+   * 1. ProcessPayment - Processes payment ✓
+   * 2. ReserveInventory - Reserves inventory ✓
+   * 3. SendConfirmation - May fail based on failure rate
+   *
+   * If SendConfirmation fails, automatic compensation occurs:
+   * - Compensate ReserveInventory (release inventory)
+   * - Compensate ProcessPayment (refund payment)
+   *
+   * Check the logs to see:
+   * - Whether the failure was triggered
+   * - The compensation sequence (if failure occurred)
+   * - All activities being rolled back in reverse order
+   *
+   * @param rate Failure rate (0-100), defaults to 50
+   * @returns Object showing execution result and compensation details
+   */
+  @Get('test-routing-slip-failure-rate')
+  async routingSlipFailureRateTest(@Query('rate') rate?: string): Promise<any> {
+    try {
+      const failureRate = rate ? parseInt(rate, 10) : 50;
+      const result = await this.appService.testRoutingSlipFailureRate(failureRate);
+      return result;
+    } catch (e) {
+      return {
+        success: false,
+        message: "Routing slip failure rate test failed",
         error: e.message
       };
     }

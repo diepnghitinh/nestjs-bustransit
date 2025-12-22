@@ -1,17 +1,13 @@
 # Changelog
 
-## 0.2.0- 2025-30-07
+## [0.3.0] - 2025-12-22
 
-- Add message bind to queue (Use for await .Send)
+### Documentation
+- **Organized Documentation**: Moved all documentation files to a dedicated `docs/` directory for better repository structure.
+- **New Setup Guide**: Added `docs/ROUTING_SLIPS_SETUP.md` with detailed installation and configuration steps.
+- **Cleanup**: Removed outdated and unlinked documentation files, including the "Pattern Comparison" guide.
+- **Updated README**: Fixed broken links and improved the documentation section to reflect the new structure.
 
-## 0.1.9 - 2025-25-07
-
-- Fixed PrefetchCount bottle neck
-
-## 0.1.7 - 2025-22-07
-
-- Fixed starting consumer after bootstrap
-
-## 1.0.3 - 2025-06-04
-
-- Init project
+## [0.2.0] - Previous Version
+- Added Saga Pattern support.
+- Added Routing Slips pattern.
