@@ -1,12 +1,32 @@
 {
   "permissions": {
     "allow": [
-      "WebFetch(domain:masstransit.io)",
       "Bash(npm run build:*)",
-      "Bash(npm install:*)",
+      "Bash(npm run start:dev:*)",
+      "Bash(timeout 30 npm run start:dev:*)",
+      "Bash(pkill:*)",
+      "Bash(mkdir:*)",
+      "WebFetch(domain:developers.kakao.com)",
+      "Bash(npx tsc:*)",
+      "mcp__ide__getDiagnostics",
+      "Bash(curl:*)",
+      "Bash(tree:*)",
+      "Bash(./node_modules/.bin/tsc:*)",
+      "Bash(node ./node_modules/.bin/tsc:*)",
+      "Bash(psql $DATABASE_URL -c \"\\d linkedin_posts\")",
+      "Bash(lsof:*)",
+      "Bash('http://localhost:8080/v1/creatives/linkedin/c8a42ca6-f1b7-41f7-9a2c-6a712fba7fe7' )",
       "Bash(cat:*)",
+      "Bash(ping:*)",
+      "Bash(timeout 60 curl -v -X POST -H 'LinkedIn-Version: 202506' -H 'X-Restli-Protocol-Version: 2.0.0' -H 'Content-Type: application/json' -H 'Authorization: Bearer AQW37k90JesSzLnWxgpqdhH_EvWJ3M8rcbD6wmZpx42-pjYKjSXB_-kEhrImB5EVxa0VXzFmYAEo2gkOx8fOyyfdO-RMQIpiukWtLwVRpoIQ8Lp5_tdDnUz0EklHOL0IPPDm5P_iBRVbtgTXyz18oiA50-6Szs0ystwSPd0gEBGTjsCcw8CBLyUvgRMa0cGJLP_CWsAOTYWWroxdIdDvgAHb10nsbyNbM4TbfIsBQ8vbx_G16oD0022aTZL2MnkCVb-WNdQj_x3PvloWmHUoM4740lIKhWQ9eaSfxwnYfDHo74Q3848tT87ghvAWtEEjOgmcMZ8oRiWuvId5cAY8LJ521Lww6A' 'https://api.linkedin.com/rest/adAccounts/514989497/creatives/urn%3Ali%3AsponsoredCreative%3A908240256' -d '{\"\"\"\"patch\"\"\"\":{\"\"\"\"$set\"\"\"\":{\"\"\"\"name\"\"\"\":\"\"\"\"My Sponsored Share Creative\"\"\"\"}}}')",
+      "Bash(xargs kill:*)",
+      "Bash(find:*)",
       "Bash(ls:*)",
-      "Bash(xargs rm -rf)"
-    ]
+      "Bash(grep:*)",
+      "Bash(npm test:*)",
+      "Bash(node:*)"
+    ],
+    "deny": [],
+    "ask": []
   }
 }
