@@ -42,15 +42,20 @@ export const retryWithDelay = ({
                     // if maximum number of retries have been met
                     // or response is a status code we don't wish to retry, throw error
                     if (++retryAttempts > maxRetryAttempts || excludedStatusCodes.find((e) => e === error.status)) {
+                        Logger.warn(`Retry: Max attempts (${maxRetryAttempts}) reached. Giving up.`);
                         return throwError(error);
                     }
                     const tryAfter = delay * scalingFactor ** (retryAttempts - 1);
 
-                    Logger.log(`Retry: Attempt ${retryAttempts}: retrying in ${tryAfter}ms`);
+                    Logger.log(`Retry: Attempt ${retryAttempts}/${maxRetryAttempts}: retrying in ${tryAfter}ms`);
                     // retry after 1s, 2s, etc...
                     return timer(tryAfter);
                 }),
-                finalize(() => Logger.log('Done with retrying.'))
+                finalize(() => {
+                    if (retryAttempts > 0) {
+                        Logger.verbose(`Retry cycle completed after ${retryAttempts} attempts`);
+                    }
+                })
             );
         }),
         tap(() => {
@@ -62,43 +67,34 @@ export const retryWithDelay = ({
 };
 
 export const retryWithIntervals = <T>(intervals: number[]) => <T>(source$: Observable<T>) => {
-    let retryAttempts = 0; // Biến đếm số lần thử lại
+    let retryAttempts = 0;
+    const maxAttempts = intervals.length;
+
     return source$.pipe(
         retryWhen((attempts: Observable<any>) => {
             return attempts.pipe(
                 switchMap((error) => {
-                    // if maximum number of retries have been met
-                    // or response is a status code we don't wish to retry, throw error
-                    if (intervals.length > 0 && retryAttempts >= intervals.length) {
+                    // if maximum number of retries have been met, throw error
+                    if (retryAttempts >= maxAttempts) {
+                        Logger.warn(`Retry: Max attempts (${maxAttempts}) reached. Giving up.`);
                         return throwError(error);
                     }
-                    const tryAfter = intervals.length > 0 ? intervals[retryAttempts] : 0;;
 
+                    const tryAfter = intervals[retryAttempts] ?? 0;
                     retryAttempts++;
-                    Logger.log(`Retry: Attempt ${retryAttempts}: retrying after ${tryAfter}ms at ${new Date()}`);
-                    // retry after 1s, 2s, etc...
+
+                    Logger.log(`Retry: Attempt ${retryAttempts}/${maxAttempts}: retrying after ${tryAfter}ms`);
                     return timer(tryAfter);
                 }),
-                finalize(() => Logger.log('Done with retrying.'))
+                finalize(() => {
+                    if (retryAttempts > 0) {
+                        Logger.verbose(`Retry cycle completed after ${retryAttempts} attempts`);
+                    }
+                })
             );
         }),
         tap(() => {
             retryAttempts = 0;
         })
-
-
-        // retryWhen(errors =>
-        //     errors.pipe(
-        //         tap(err => {
-        //             if (intervals.length > 0 && retryAttempts >= intervals.length) {
-        //                 throw err; // Nếu đã thử lại hết số lần quy định, ném lỗi
-        //             }
-        //             const delayTime = intervals.length > 0 ? intervals[retryAttempts % intervals.length] : 0;
-        //             console.log(`Try after ${delayTime}ms... (Attempt ${retryAttempts + 1})`);
-        //             retryAttempts++;
-        //         }),
-        //         delayWhen(() => timer(intervals.length > 0 ? intervals[retryAttempts - 1] : 0)) // Sử dụng retryCount - 1 để lấy khoảng thời gian trước đó
-        //     )
-        // )
     );
 }

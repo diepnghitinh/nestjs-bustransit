@@ -1,7 +1,6 @@
 import {Controller, Inject, Injectable, Logger} from "@nestjs/common";
 import {OrderConfirmed, OrderFailed, ProcessPayment, RefundPayment} from "@shared/messages/message";
-import {BusTransitConsumer, IPublishEndpoint, ISagaConsumeContext} from "nestjs-bustransit";
-
+import { BusTransitConsumer, IPublishEndpoint, ISagaConsumeContext } from "nestjs-bustransit";
 
 @Injectable()
 export class OrderRefundConsumer extends BusTransitConsumer<RefundPayment> {

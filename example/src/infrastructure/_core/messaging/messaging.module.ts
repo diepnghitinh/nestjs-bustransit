@@ -11,7 +11,11 @@ import {ProcessPaymentConsumer} from "@infrastructure/messaging/sagas/ProcessPay
 import {ReserveInventoryConsumer} from "@infrastructure/messaging/sagas/ReserveInventoryConsumer";
 import {OrderRefundConsumer} from "@infrastructure/messaging/sagas/OrderRefundConsumer";
 import {OrderConfirmedConsumer} from "@infrastructure/messaging/sagas/OrderConfirmedConsumer";
-import {BusTransit} from "nestjs-bustransit";
+import { BusTransit, RoutingSlipBusConfigurator } from 'nestjs-bustransit';
+import { ProcessPaymentActivity } from '@infrastructure/messaging/routing-slips/activities/ProcessPaymentActivity';
+import { ReserveInventoryActivity } from '@infrastructure/messaging/routing-slips/activities/ReserveInventoryActivity';
+import { SendConfirmationActivity } from '@infrastructure/messaging/routing-slips/activities/SendConfirmationActivity';
+import { ValidateInventoryActivity } from '@infrastructure/messaging/routing-slips/activities/ValidateInventoryActivity';
 
 const configService = new ConfigService();
 
@@ -38,6 +42,20 @@ const configService = new ConfigService();
             });
 
             x.AddSagaStateMachine(OrderStateMachine, OrderState);
+
+            // Configure Routing Slip Activities
+            // This automatically detects the mode from RoutingSlipModule.forRoot() in app.module.ts
+            // - InProcess mode: Consumers are automatically skipped
+            // - Distributed mode: Consumers are automatically registered
+            RoutingSlipBusConfigurator.configure(x, {
+                queuePrefix: 'myapp',
+                activities: [
+                    ProcessPaymentActivity,
+                    ReserveInventoryActivity,
+                    SendConfirmationActivity,
+                    ValidateInventoryActivity
+                ]
+            });
 
             // Sử dụng Name, các exchange sau này sẽ có dạng {APP_NAME}:{QUEUE} , {APP_NAME}:{EVENT...}
             x.UsingRabbitMq(configService.get('APP_NAME'), (context, cfg) =>
@@ -87,6 +105,20 @@ const configService = new ConfigService();
                 cfg.ReceiveEndpoint("saga-order-refund", e => {
                     e.ConfigureConsumer(OrderRefundConsumer, context, c => {
                     });
+                });
+
+                // Configure Routing Slip Activity Endpoints
+                // This automatically detects the mode from RoutingSlipModule.forRoot()
+                // - InProcess mode: Endpoints are automatically skipped
+                // - Distributed mode: Endpoints are automatically configured
+                RoutingSlipBusConfigurator.configureEndpoints(cfg, context, {
+                    queuePrefix: 'myapp',
+                    activities: [
+                        ProcessPaymentActivity,
+                        ReserveInventoryActivity,
+                        SendConfirmationActivity,
+                        ValidateInventoryActivity
+                    ]
                 });
             })
         })

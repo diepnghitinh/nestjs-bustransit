@@ -7,14 +7,14 @@ import {BusTransitStateMachine} from "./saga.bustransit.state-machine";
 import {IState} from "../interfaces/saga";
 
 export class EventActivityBinder<TState extends object, TEvent> implements IEventActivityBinder<TState, TEvent> {
-    private stateClass: BusTransitStateMachine<any>;
-    private eventClass: { new(...args: any[]): TEvent };
-    private previousStates = {};
+    public stateClass: BusTransitStateMachine<any>;
+    public eventClass: { new(...args: any[]): TEvent };
+    public previousStates = {};
 
-    private stepThen: (c: BehaviorContext<TState, TEvent>) => void;
-    private publishAsync: (c: IBehaviorContext<TState, TEvent>) => any;
-    private transitionTo: (c: SagaState<any>) => any;
-    private finalize: any;
+    public stepThen: (c: BehaviorContext<TState, TEvent>) => void;
+    public publishAsync: (c: IBehaviorContext<TState, TEvent>) => any;
+    public transitionTo: SagaState<any>;
+    public finalize: any;
 
     constructor(whenClass: { new(...args: any[]): TEvent }) {
         this.eventClass = whenClass;
@@ -31,8 +31,8 @@ export class EventActivityBinder<TState extends object, TEvent> implements IEven
         return this;
     }
 
-    TransitionTo(c: (c: IState) => void): IEventActivityBinder<TState, TEvent> {
-        this.transitionTo = c;
+    TransitionTo(c: IState): IEventActivityBinder<TState, TEvent> {
+        this.transitionTo = c as SagaState<any>;
         return this;
     }
 

@@ -8,8 +8,8 @@
     "allowSyntheticDefaultImports": true,
     "target": "ES2021",
     "sourceMap": true,
-    "outDir": "./dist",
-    "baseUrl": "./",
+    "outDir": "dist",
+    "baseUrl": "",
     "incremental": true,
     "skipLibCheck": true,
     "strictNullChecks": false,
@@ -21,6 +21,14 @@
       "@shared/*": ["shared/*"],
       "@infrastructure/*": ["src/infrastructure/*"],
       "@configs/*": ["src/configs/*"],
+      "nestjs-bustransit": ["lib/index"]
     }
-  }
+  },
+  "exclude": [
+    "libs/**/*",
+    "schemas/**/*",
+    "node_modules",
+    "test",
+    "dist"
+  ]
 }

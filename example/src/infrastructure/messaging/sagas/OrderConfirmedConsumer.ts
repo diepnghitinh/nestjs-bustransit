@@ -1,7 +1,7 @@
 import {Controller, Inject, Injectable, Logger} from "@nestjs/common";
 import { v7 as uuidv7 } from 'uuid';
 import {OrderConfirmed, OrderFailed, ProcessPayment} from "@shared/messages/message";
-import {BusTransitConsumer, IPublishEndpoint, ISagaConsumeContext} from "nestjs-bustransit";
+import { BusTransitConsumer, IPublishEndpoint, ISagaConsumeContext } from "nestjs-bustransit";
 
 
 @Injectable()

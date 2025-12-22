@@ -2,7 +2,7 @@ import {Controller, Inject, Injectable, Logger} from "@nestjs/common";
 import { v7 as uuidv7 } from 'uuid';
 import {OrderFailed, ProcessPayment, ReserveInventory} from "@shared/messages/message";
 import {InventoryReserved, PaymentProcessed} from "@infrastructure/messaging/sagas/OrderProcessingStateMachine";
-import {BusTransitConsumer, IPublishEndpoint, ISagaConsumeContext} from "nestjs-bustransit";
+import { BusTransitConsumer, IPublishEndpoint, ISagaConsumeContext } from "nestjs-bustransit";
 
 @Injectable()
 export class ReserveInventoryConsumer extends BusTransitConsumer<ReserveInventory> {

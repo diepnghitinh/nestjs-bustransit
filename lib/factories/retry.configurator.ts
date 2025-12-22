@@ -25,7 +25,8 @@ export enum RetryLevel {
 export enum Retry {
     Immediate,
     Interval,
-    Intervals
+    Intervals,
+    Exponential
 }
 
 export class RetryConfigurator implements IRetryConfigurator {
@@ -53,18 +54,38 @@ export class RetryConfigurator implements IRetryConfigurator {
         this.retryValue = delays;
     }
 
+    Exponential(retryCount: number, initialDelay: number = 1000, scalingFactor: number = 2) {
+        this.retryType = Retry.Exponential;
+        this.retryValue = [retryCount, initialDelay, scalingFactor];
+    }
+
     getRetryValue() {
         switch (this.retryType) {
             case Retry.Interval:
                 return {
                     retryType: this.retryType,
                     retryValue: this.retryValue,
+                    pipe: retryWithDelay({
+                        maxRetryAttempts: this.retryValue[0],
+                        delay: this.retryValue[1],
+                        scalingFactor: 1
+                    })
                 }
             case Retry.Intervals:
                 return {
                     retryType: this.retryType,
                     retryValue: this.retryValue,
                     pipe: retryWithIntervals(this.retryValue)
+                };
+            case Retry.Exponential:
+                return {
+                    retryType: this.retryType,
+                    retryValue: this.retryValue,
+                    pipe: retryWithDelay({
+                        maxRetryAttempts: this.retryValue[0],
+                        delay: this.retryValue[1],
+                        scalingFactor: this.retryValue[2]
+                    })
                 };
             case Retry.Immediate:
             default:
@@ -74,7 +95,6 @@ export class RetryConfigurator implements IRetryConfigurator {
                     pipe: retryWithDelay({ maxRetryAttempts: this.retryValue, delay: 0 })
                 };
         }
-        return null;
     }
 
 }

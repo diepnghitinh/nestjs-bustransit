@@ -4,6 +4,8 @@
 /node_modules
 /example/node_modules
 /build
+*.map
+/example/lib
 
 # Logs
 logs

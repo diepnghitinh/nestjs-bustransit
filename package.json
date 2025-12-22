@@ -1,6 +1,6 @@
 {
   "name": "nestjs-bustransit",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "ServiceBus for NestJs",
   "author": "nguyen2242x@gmail.com",
   "license": "MIT",
@@ -30,7 +30,7 @@
   },
   "devDependencies": {
     "@nestjs/common": "^10.0.0",
-    "@nestjs/core": "^10.0.0",
+    "@nestjs/core": "^11.1.2",
     "@types/node": "^20.3.1",
     "@types/amqplib": "^0.10.7",
     "typescript": "^5.1.3"

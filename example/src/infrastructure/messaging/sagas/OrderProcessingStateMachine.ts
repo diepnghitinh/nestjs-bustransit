@@ -1,8 +1,9 @@
 
 import {Inject, Injectable, Logger} from "@nestjs/common";
 import {OrderConfirmed, ProcessPayment, RefundPayment, ReserveInventory, OrderFailed} from "@shared/messages/message";
+import { BusTransitStateMachine, SagaEvent, SagaState, SagaStateMachineInstance } from "nestjs-bustransit";
+
 import {v7 as uuidv7} from "uuid";
-import {BusTransitStateMachine, SagaStateMachineInstance, SagaEvent, SagaState} from "nestjs-bustransit";
 
 export class OrderState extends SagaStateMachineInstance
 {

@@ -72,13 +72,14 @@ export class BusTransitStateMachine<TState extends object> extends BusTransitCon
         return this._workflow[whenClass.name]
     }
 
+
     async Consume<TMessage extends TState>(ctx: BehaviorContext<SagaStateMachineInstance, TMessage>, context: ISagaConsumeContext<TState, TMessage>): Promise<any> {
         await super.Consume(ctx, context);
 
         let fullMessage = bufferToStringJson((context as any).content)
         // let receiveEvent = this.getExchange(context.fields?.exchange);
         let receiveEvent = getLastPart(fullMessage.messageType);
-        let currentState = this._workflow[receiveEvent];
+        let currentState = this._workflow[receiveEvent] as EventActivityBinder<TState, any>;
 
         // Saga message
         // let ctx = new BehaviorContext<SagaStateMachineInstance, any>();
@@ -108,7 +109,7 @@ export class BusTransitStateMachine<TState extends object> extends BusTransitCon
 
         // Run step workflow
         if (currentState.stepThen) {
-            currentState.stepThen(ctx)
+            currentState.stepThen(ctx as any)
         }
 
         if (currentState.transitionTo) {
@@ -119,7 +120,7 @@ export class BusTransitStateMachine<TState extends object> extends BusTransitCon
         let getResult = true;
         if (currentState.publishAsync) {
             ctx.producerClient = super.producer;
-            const msg = await currentState.publishAsync(ctx)
+            const msg = await currentState.publishAsync(ctx as any)
             getResult = await ctx.producerClient.Send(msg, ctx);
         }
 
