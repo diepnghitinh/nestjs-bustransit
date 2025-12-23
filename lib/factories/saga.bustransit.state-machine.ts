@@ -1,8 +1,7 @@
 import {IBusTransitStateMachine} from "../interfaces/saga.bustransit.state-machine.interface";
 import {EventActivityBinder} from "./event.activity-binder";
 import {BusTransitConsumer} from "./consumer";
-import {Injectable, Logger, Optional, Inject, OnModuleInit} from "@nestjs/common";
-import {ModuleRef} from "@nestjs/core";
+import {Injectable, Logger, Optional, Inject} from "@nestjs/common";
 import {SagaState} from "./saga.state";
 import {BehaviorContext} from "./behavior.context";
 import {IEventActivityBinder} from "../interfaces/event.activity-binder.interface";
@@ -18,7 +17,7 @@ import {SAGA_REPOSITORY, SAGA_PERSISTENCE_OPTIONS} from "../constants/saga-persi
 import {SagaPersistenceOptions} from "../interfaces/saga-persistence-options.interface";
 import {InMemorySagaRepository} from "../persistence/repositories/in-memory-saga.repository";
 
-export class BusTransitStateMachine<TState extends object> extends BusTransitConsumer<TState> implements IBusTransitStateMachine<TState>, IEventActivities<TState>, OnModuleInit {
+export class BusTransitStateMachine<TState extends object> extends BusTransitConsumer<TState> implements IBusTransitStateMachine<TState>, IEventActivities<TState> {
 
     StateInitially = new SagaState('INITIALLY');
     StateFinalize = new SagaState('FINALIZE');
@@ -32,56 +31,27 @@ export class BusTransitStateMachine<TState extends object> extends BusTransitCon
     private _finalized;
     private repository: ISagaRepository<any>;
     private autoArchive: boolean = false;
-    private repositoryInitialized: boolean = false;
 
     constructor(
         stateClass: { new(...args: any[]): TState },
-        @Optional() private readonly moduleRef?: ModuleRef
+        @Optional() @Inject(SAGA_REPOSITORY) repository?: ISagaRepository<any>,
+        @Optional() @Inject(SAGA_PERSISTENCE_OPTIONS) options?: SagaPersistenceOptions
     ) {
         super(stateClass);
         this._classMessage = stateClass;
 
-        // Initialize with in-memory repository temporarily
-        // Will be replaced in onModuleInit if a persistent repository is available
-        this.repository = new InMemorySagaRepository<any>();
-
-        Logger.log(`[SG] Saga state machine constructor called for ${stateClass.name}`);
-    }
-
-    async onModuleInit() {
-        // Try to get the persistent repository from the module
-        if (this.moduleRef) {
-            try {
-                const persistentRepository = await this.moduleRef.resolve(SAGA_REPOSITORY);
-                if (persistentRepository) {
-                    this.repository = persistentRepository;
-                    this.repositoryInitialized = true;
-                    Logger.log(`[SG] Saga state machine initialized with persistent repository`);
-                } else {
-                    Logger.warn(`[SG] SAGA_REPOSITORY not found, using in-memory repository`);
-                }
-            } catch (error) {
-                Logger.warn(`[SG] Failed to resolve SAGA_REPOSITORY: ${error.message}, using in-memory repository`);
-            }
-
-            // Try to get persistence options
-            try {
-                const options = await this.moduleRef.resolve(SAGA_PERSISTENCE_OPTIONS);
-                if (options) {
-                    this.autoArchive = options.autoArchive || false;
-                }
-            } catch (error) {
-                // Options are optional, no warning needed
-            }
-        }
+        // Use provided repository or fallback to in-memory (backward compatibility)
+        this.repository = repository || new InMemorySagaRepository<any>();
 
         // Set state class on repository for deserialization
         if (this.repository['setStateClass']) {
-            this.repository['setStateClass'](this._classMessage);
+            this.repository['setStateClass'](stateClass);
         }
 
-        const repoType = this.repositoryInitialized ? 'persistent' : 'in-memory';
-        Logger.log(`[SG] Saga state machine for ${this._classMessage.name} fully initialized with ${repoType} repository`);
+        // Configure auto-archive from options
+        this.autoArchive = options?.autoArchive || false;
+
+        Logger.log(`[SG] Saga state machine initialized with ${repository ? 'persistent' : 'in-memory'} repository`);
     }
 
     get GetEvents(): any {
