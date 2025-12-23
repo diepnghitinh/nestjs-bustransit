@@ -120,9 +120,13 @@ export class BusTransitStateMachine<TState extends object> extends BusTransitCon
             Logger.log(`[SG] Created new saga: ${ctx.Saga.CorrelationId}`);
         }
 
-        Logger.log(`[SG] ****** Receive Event: ` + receiveEvent + ', CorrelationId: ' + ctx.Saga.CorrelationId);
-        //Logger.log(`[SG] SagaState current: ${ctx.Saga.CurrentState} , msg: ${JSON.stringify(this.sagaStore[ctx.Saga.CorrelationId])}`)
-        Logger.log(`[SG] SagaState current: ${ctx.Saga.CurrentState} , msg: ${JSON.stringify(ctx.Saga)}`)
+        Logger.log(`\n${'='.repeat(80)}`);
+        Logger.log(`[SG] ******* SAGA EVENT RECEIVED *******`);
+        Logger.log(`[SG] Event: ${receiveEvent}`);
+        Logger.log(`[SG] Correlation ID: ${ctx.Saga.CorrelationId}`);
+        Logger.log(`[SG] Current State: ${ctx.Saga.CurrentState}`);
+        Logger.log(`[SG] Repository Type: ${this.repository.constructor.name}`);
+        Logger.log(`${'='.repeat(80)}\n`);
 
         // Check event in State
         if ([this.StateInitially.Name].includes(ctx.Saga.CurrentState) == false && !currentState.previousStates[ctx.Saga.CurrentState]) {
@@ -131,24 +135,44 @@ export class BusTransitStateMachine<TState extends object> extends BusTransitCon
 
         // Run step workflow
         if (currentState.stepThen) {
+            Logger.log(`[SG] Step 1/4: Executing workflow step (.Then logic)...`);
             currentState.stepThen(ctx as any)
+            Logger.log(`[SG] Step 1/4: ✓ Workflow step completed`);
         }
 
         if (currentState.transitionTo) {
-            Logger.log(`[SG] Event ${receiveEvent} => TransitionTo ${currentState.transitionTo.Name}`)
+            Logger.log(`[SG] Step 2/4: Transitioning state...`);
+            Logger.log(`[SG]   From: ${ctx.Saga.CurrentState}`);
+            Logger.log(`[SG]   To:   ${currentState.transitionTo.Name}`);
             ctx.Saga.CurrentState = currentState.transitionTo.Name;
+            Logger.log(`[SG] Step 2/4: ✓ State transition completed`);
+        }
+
+        // Save saga state BEFORE publishing next message
+        try {
+            Logger.log(`[SG] Step 3/4: Saving saga state to database...`);
+            Logger.log(`[SG]   Repository: ${this.repository.constructor.name}`);
+            Logger.log(`[SG]   Correlation ID: ${ctx.Saga.CorrelationId}`);
+            Logger.log(`[SG]   State: ${ctx.Saga.CurrentState}`);
+            Logger.log(`[SG]   Data: ${JSON.stringify(ctx.Saga)}`);
+
+            await this.repository.save(ctx.Saga);
+
+            Logger.log(`[SG] Step 3/4: ✓ Saga state saved successfully`);
+        } catch (error) {
+            Logger.error(`[SG] Step 3/4: ✗ Failed to save saga state`, error);
+            throw error;
         }
 
         let getResult = true;
         if (currentState.publishAsync) {
+            Logger.log(`[SG] Step 4/4: Publishing next message...`);
             ctx.producerClient = super.producer;
             const msg = await currentState.publishAsync(ctx as any)
+            Logger.log(`[SG]   Message type: ${msg.constructor.name}`);
             getResult = await ctx.producerClient.Send(msg, ctx);
+            Logger.log(`[SG] Step 4/4: ✓ Message published successfully`);
         }
-
-        // Save saga state after transition
-        await this.repository.save(ctx.Saga);
-        Logger.log(`[SG] Saved saga state: ${ctx.Saga.CorrelationId}`);
 
         // console.log('Node ' + process.env.PORT)
         // console.log(ctx.Saga)

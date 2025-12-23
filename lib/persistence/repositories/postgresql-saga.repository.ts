@@ -71,49 +71,63 @@ export class PostgreSQLSagaRepository<TSaga extends SagaStateMachineInstance>
             const currentVersion = saga['version'] || 0;
             const sagaType = saga.constructor.name;
 
-            // Use raw query for upsert with optimistic locking
-            // PostgreSQL-specific INSERT ... ON CONFLICT with version check
-            const result = await this.repository.query(`
-                INSERT INTO "saga_states" (
-                    "correlationId",
-                    "currentState",
-                    "sagaType",
-                    data,
-                    version,
-                    "createdAt",
-                    "updatedAt"
-                )
-                VALUES ($1, $2, $3, $4, 1, NOW(), NOW())
-                ON CONFLICT ("correlationId")
-                DO UPDATE SET
-                    "currentState" = $2,
-                    "sagaType" = $3,
-                    data = $4,
-                    version = "saga_states".version + 1,
-                    "updatedAt" = NOW()
-                WHERE "saga_states".version = $5
-                RETURNING version
-            `, [
-                saga.CorrelationId,
-                saga.CurrentState,
-                sagaType,
-                serialized,
-                currentVersion
-            ]);
-
-            if (!result || result.length === 0) {
-                throw new Error(
-                    `Optimistic locking failed for saga ${saga.CorrelationId}. ` +
-                    `Version mismatch (expected: ${currentVersion})`
-                );
-            }
-
-            // Update version on saga instance
-            saga['version'] = result[0].version;
-
-            this.logger.debug(
-                `Saved saga: ${saga.CorrelationId}, State: ${saga.CurrentState}, Version: ${result[0].version}`
+            this.logger.log(
+                `[PostgreSQL] Saving saga: ${saga.CorrelationId}, Type: ${sagaType}, State: ${saga.CurrentState}, Version: ${currentVersion}`
             );
+
+            try {
+                // Use raw query for upsert with optimistic locking
+                // PostgreSQL-specific INSERT ... ON CONFLICT with version check
+                const result = await this.repository.query(`
+                    INSERT INTO "saga_states" (
+                        "correlationId",
+                        "currentState",
+                        "sagaType",
+                        data,
+                        version,
+                        "createdAt",
+                        "updatedAt"
+                    )
+                    VALUES ($1, $2, $3, $4, 1, NOW(), NOW())
+                    ON CONFLICT ("correlationId")
+                    DO UPDATE SET
+                        "currentState" = $2,
+                        "sagaType" = $3,
+                        data = $4,
+                        version = "saga_states".version + 1,
+                        "updatedAt" = NOW()
+                    WHERE "saga_states".version = $5
+                    RETURNING version
+                `, [
+                    saga.CorrelationId,
+                    saga.CurrentState,
+                    sagaType,
+                    serialized,
+                    currentVersion
+                ]);
+
+                this.logger.log(`[PostgreSQL] Query executed, result rows: ${result?.length || 0}`);
+
+                if (!result || result.length === 0) {
+                    throw new Error(
+                        `Optimistic locking failed for saga ${saga.CorrelationId}. ` +
+                        `Version mismatch (expected: ${currentVersion})`
+                    );
+                }
+
+                // Update version on saga instance
+                saga['version'] = result[0].version;
+
+                this.logger.log(
+                    `[PostgreSQL] Saved saga: ${saga.CorrelationId}, State: ${saga.CurrentState}, Version: ${result[0].version}`
+                );
+            } catch (error) {
+                this.logger.error(
+                    `[PostgreSQL] Failed to save saga ${saga.CorrelationId}: ${error.message}`,
+                    error.stack
+                );
+                throw error;
+            }
         }, 'save');
     }
 

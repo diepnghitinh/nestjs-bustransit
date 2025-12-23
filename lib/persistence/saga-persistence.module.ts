@@ -124,6 +124,13 @@ export class SagaPersistenceModule {
             providers.push({
                 provide: POSTGRESQL_CONNECTION,
                 useFactory: async () => {
+                    const { Logger } = require('@nestjs/common');
+                    const logger = new Logger('SagaPersistenceModule');
+
+                    logger.log('[PostgreSQL] Initializing PostgreSQL connection for saga persistence...');
+                    logger.log(`[PostgreSQL] Config: ${moduleOptions.connection?.host}:${moduleOptions.connection?.port}/${moduleOptions.connection?.database}`);
+                    logger.log(`[PostgreSQL] Auto-create schema: ${moduleOptions.autoCreateSchema !== false}`);
+
                     const { DataSource } = require('typeorm');
                     const { SagaStateEntity } = require('./models/postgresql/saga-state.entity');
 
@@ -136,12 +143,20 @@ export class SagaPersistenceModule {
                         database: moduleOptions.connection?.database || 'bustransit',
                         schema: moduleOptions.connection?.schema || 'public',
                         entities: [SagaStateEntity],
-                        synchronize: moduleOptions.autoCreateSchema || false,
-                        ssl: moduleOptions.connection?.ssl || false
+                        synchronize: moduleOptions.autoCreateSchema !== false,
+                        ssl: moduleOptions.connection?.ssl || false,
+                        logging: true
                     });
 
-                    await dataSource.initialize();
-                    return dataSource;
+                    try {
+                        await dataSource.initialize();
+                        logger.log('[PostgreSQL] Connection established successfully');
+                        logger.log('[PostgreSQL] Table saga_states should be ready');
+                        return dataSource;
+                    } catch (error) {
+                        logger.error('[PostgreSQL] Failed to initialize connection:', error.message);
+                        throw error;
+                    }
                 }
             });
         }
@@ -271,6 +286,13 @@ export class SagaPersistenceModule {
             useFactory: async (opts: SagaPersistenceOptions) => {
                 if (opts.type !== SagaPersistenceType.PostgreSQL) return null;
 
+                const { Logger } = require('@nestjs/common');
+                const logger = new Logger('SagaPersistenceModule');
+
+                logger.log('[PostgreSQL] Initializing PostgreSQL connection for saga persistence (async)...');
+                logger.log(`[PostgreSQL] Config: ${opts.connection?.host}:${opts.connection?.port}/${opts.connection?.database}`);
+                logger.log(`[PostgreSQL] Auto-create schema: ${opts.autoCreateSchema !== false}`);
+
                 const { DataSource } = require('typeorm');
                 const { SagaStateEntity } = require('./models/postgresql/saga-state.entity');
 
@@ -283,12 +305,20 @@ export class SagaPersistenceModule {
                     database: opts.connection?.database || 'bustransit',
                     schema: opts.connection?.schema || 'public',
                     entities: [SagaStateEntity],
-                    synchronize: opts.autoCreateSchema || false,
-                    ssl: opts.connection?.ssl || false
+                    synchronize: opts.autoCreateSchema !== false,
+                    ssl: opts.connection?.ssl || false,
+                    logging: true
                 });
 
-                await dataSource.initialize();
-                return dataSource;
+                try {
+                    await dataSource.initialize();
+                    logger.log('[PostgreSQL] Connection established successfully (async)');
+                    logger.log('[PostgreSQL] Table saga_states should be ready');
+                    return dataSource;
+                } catch (error) {
+                    logger.error('[PostgreSQL] Failed to initialize connection (async):', error.message);
+                    throw error;
+                }
             },
             inject: [SAGA_PERSISTENCE_OPTIONS]
         });

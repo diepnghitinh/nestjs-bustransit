@@ -21,23 +21,24 @@ export class SagaRepositoryFactory {
         mongoConnection?: any,
         postgresConnection?: any
     ): ISagaRepository<TSaga> {
+        this.logger.log(`[RepositoryFactory] Creating saga repository of type: ${options.type}`);
+
         // Custom repository takes precedence
         if (options.customRepository) {
-            this.logger.log('Creating custom saga repository');
+            this.logger.log('[RepositoryFactory] Creating custom saga repository');
             return new options.customRepository();
         }
 
         // Factory based on type
         switch (options.type) {
             case SagaPersistenceType.InMemory:
-                this.logger.log('Creating in-memory saga repository');
+                this.logger.log('[RepositoryFactory] Creating in-memory saga repository');
                 return new InMemorySagaRepository<TSaga>();
 
             case SagaPersistenceType.MongoDB:
-                this.logger.log('Creating MongoDB saga repository');
-                // MongoDB repository will be implemented in Phase 2
-                // For now, throw error to guide users
+                this.logger.log('[RepositoryFactory] Creating MongoDB saga repository');
                 if (!mongoConnection) {
+                    this.logger.error('[RepositoryFactory] MongoDB connection not available');
                     throw new Error(
                         'MongoDB persistence requires mongoose to be installed. ' +
                         'Run: npm install mongoose'
@@ -47,13 +48,14 @@ export class SagaRepositoryFactory {
                 const { MongoDBSagaRepository }: {
                     MongoDBSagaRepository: new (options: any, serializer: any, mongoConnection: any) => ISagaRepository<TSaga>
                 } = require('../persistence/repositories/mongodb-saga.repository');
+                this.logger.log('[RepositoryFactory] MongoDB repository created successfully');
                 return new MongoDBSagaRepository(options, serializer, mongoConnection);
 
             case SagaPersistenceType.PostgreSQL:
-                this.logger.log('Creating PostgreSQL saga repository');
-                // PostgreSQL repository will be implemented in Phase 3
-                // For now, throw error to guide users
+                this.logger.log('[RepositoryFactory] Creating PostgreSQL saga repository');
+                this.logger.log(`[RepositoryFactory] PostgreSQL connection available: ${!!postgresConnection}`);
                 if (!postgresConnection) {
+                    this.logger.error('[RepositoryFactory] PostgreSQL connection not available');
                     throw new Error(
                         'PostgreSQL persistence requires @nestjs/typeorm, typeorm, and pg to be installed. ' +
                         'Run: npm install @nestjs/typeorm typeorm pg'
@@ -63,6 +65,7 @@ export class SagaRepositoryFactory {
                 const { PostgreSQLSagaRepository }: {
                     PostgreSQLSagaRepository: new (options: any, serializer: any, postgresConnection: any) => ISagaRepository<TSaga>
                 } = require('../persistence/repositories/postgresql-saga.repository');
+                this.logger.log('[RepositoryFactory] PostgreSQL repository created successfully');
                 return new PostgreSQLSagaRepository(options, serializer, postgresConnection);
 
             default:

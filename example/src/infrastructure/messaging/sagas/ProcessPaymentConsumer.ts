@@ -20,21 +20,16 @@ export class ProcessPaymentConsumer extends BusTransitConsumer<ProcessPayment> {
         await super.Consume(ctx, context)
 
         const randomRate = Math.random();
-        // if (randomRate > 0.2) {
-        //     let paymentProcessed = new PaymentProcessed();
-        //     paymentProcessed.OrderId = context.Message.OrderId;
-        //     paymentProcessed.PaymentIntentId = `T_${uuidv7()}`;
-        //     return await this.publishEndpoint.Send<PaymentProcessed>(paymentProcessed, ctx);
-        // } else {
-        //     let orderFailed = new OrderFailed();
-        //     orderFailed.OrderId = context.Message.OrderId;
-        //     orderFailed.Reason = "Payment failed";
-        //     return await this.publishEndpoint.Send<OrderFailed>(orderFailed, ctx);
-        // }
-
-        let paymentProcessed = new PaymentProcessed();
+        if (randomRate > 0.2) {
+            let paymentProcessed = new PaymentProcessed();
             paymentProcessed.OrderId = context.Message.OrderId;
             paymentProcessed.PaymentIntentId = `T_${uuidv7()}`;
             return await this.publishEndpoint.Send<PaymentProcessed>(paymentProcessed, ctx);
+        } else {
+            let orderFailed = new OrderFailed();
+            orderFailed.OrderId = context.Message.OrderId;
+            orderFailed.Reason = "Payment failed";
+            return await this.publishEndpoint.Send<OrderFailed>(orderFailed, ctx);
+        }
     }
 }
