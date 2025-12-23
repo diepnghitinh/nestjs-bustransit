@@ -13,6 +13,7 @@ import { ProcessPaymentActivity } from '@infrastructure/messaging/routing-slips/
 import { ReserveInventoryActivity } from '@infrastructure/messaging/routing-slips/activities/ReserveInventoryActivity';
 import { SendConfirmationActivity } from '@infrastructure/messaging/routing-slips/activities/SendConfirmationActivity';
 import { ValidateInventoryActivity } from '@infrastructure/messaging/routing-slips/activities/ValidateInventoryActivity';
+import { HybridPatternService } from '@infrastructure/messaging/hybrid/HybridPatternService';
 import { RoutingSlipModule } from 'nestjs-bustransit';
 
 @Module({
@@ -42,6 +43,8 @@ import { RoutingSlipModule } from 'nestjs-bustransit';
     ReserveInventoryActivity,
     SendConfirmationActivity,
     ValidateInventoryActivity,
+    // Hybrid pattern service
+    HybridPatternService,
   ],
 })
 export class AppModule {}
