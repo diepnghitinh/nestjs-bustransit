@@ -25,7 +25,10 @@ export class RabbitMqReceiveEndpointConfigurator implements
     }
 
     ConfigureConsumer<T>(consumer: T, ctx, c: (c: IConsumerConfigurator) => void) {
-        let consumerBind = ctx.consumers[(consumer as any).name] ?? (consumer as any).name;
+        let consumerData = ctx.consumers[(consumer as any).name] ?? (consumer as any).name;
+        // Extract class if it's a saga consumer data object
+        let consumerBind = consumerData?.machineClass || consumerData;
+
         const consumerConfigurator = new ConsumerConfigurator();
         consumerConfigurator.bindQueue(this.queueName);
         consumerConfigurator.bindConsumer(consumerBind);
@@ -44,7 +47,12 @@ export class RabbitMqReceiveEndpointConfigurator implements
     ConfigureSaga<T>(stateClass: { new(...args: any[]): T }, ctx, c: (c: ISagaConfigurator) => void) {
         const sagaConfigurator = new SagaConfigurator();
         sagaConfigurator.bindQueue(this.queueName);
-        sagaConfigurator.bindConsumer(ctx.consumers[ctx.sagasConsumers[stateClass.name].name]);
+
+        // Get the saga consumer data (might be object with machineClass/stateClass or just the class)
+        const sagaConsumerData = ctx.consumers[ctx.sagasConsumers[stateClass.name].name];
+        const machineClass = sagaConsumerData?.machineClass || sagaConsumerData;
+
+        sagaConfigurator.bindConsumer(machineClass);
         sagaConfigurator.setOptions({
             PrefetchCount: this.PrefetchCount,
         })

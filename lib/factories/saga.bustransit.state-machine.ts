@@ -34,8 +34,8 @@ export class BusTransitStateMachine<TState extends object> extends BusTransitCon
 
     constructor(
         stateClass: { new(...args: any[]): TState },
-        @Optional() @Inject(SAGA_REPOSITORY) repository?: ISagaRepository<any>,
-        @Optional() @Inject(SAGA_PERSISTENCE_OPTIONS) options?: SagaPersistenceOptions
+        repository?: ISagaRepository<any>,
+        options?: SagaPersistenceOptions
     ) {
         super(stateClass);
         this._classMessage = stateClass;
@@ -51,7 +51,7 @@ export class BusTransitStateMachine<TState extends object> extends BusTransitCon
         // Configure auto-archive from options
         this.autoArchive = options?.autoArchive || false;
 
-        Logger.log(`[SG] Saga state machine initialized with ${repository ? 'persistent' : 'in-memory'} repository`);
+        Logger.log(`[SG] Saga state machine ${stateClass.name} initialized with ${repository ? repository.constructor.name : 'in-memory'} repository`);
     }
 
     get GetEvents(): any {

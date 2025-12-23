@@ -159,7 +159,10 @@ export class BusTransitBrokerRabbitMqFactory extends BusTransitBrokerBaseFactory
         Logger.debug(`Created All Exchange`);
         const exchanges = [];
         for (const [key, consumerClass] of Object.entries(this.consumers)) {
-            const consumer = consumerClass as any;
+            // Extract actual class if it's a saga consumer data object
+            const consumerData = consumerClass as any;
+            const consumer = consumerData?.machineClass || consumerData;
+
             const bus = this.moduleRef.get(consumer) as BusTransitConsumer<any>;
             // IF had .Endpoint()
             if (consumer.EndpointRegistrationConfigurator) {
@@ -168,7 +171,7 @@ export class BusTransitBrokerRabbitMqFactory extends BusTransitBrokerBaseFactory
             }
 
             // If consumer is Saga
-            if (Object.getPrototypeOf(consumerClass) === BusTransitStateMachine) {
+            if (Object.getPrototypeOf(consumer) === BusTransitStateMachine) {
                 const _busSaga = bus as BusTransitStateMachine<any>;
 
                 //console.log('exchange saga: ' + _busSaga.GetMessageClass.name + ' <- ' + consumer.EndpointRegistrationConfigurator.Name);

@@ -18,16 +18,21 @@ export class ReserveInventoryConsumer extends BusTransitConsumer<ReserveInventor
         await super.Consume(ctx, context)
 
         const randomRate = Math.random();
-        if (randomRate > 0.5) {
-            let inventoryReserved = new InventoryReserved();
+        let inventoryReserved = new InventoryReserved();
             inventoryReserved.OrderId = context.Message.OrderId;
             return await this.publishEndpoint.Send<InventoryReserved>(inventoryReserved, ctx);
-        } else {
-            let orderFailed = new OrderFailed();
-            orderFailed.OrderId = context.Message.OrderId;
-            orderFailed.Reason = "Inventory not available";
-            return await this.publishEndpoint.Send<OrderFailed>(orderFailed, ctx);
-        }
+
+            
+        // if (randomRate > 0.5) {
+        //     let inventoryReserved = new InventoryReserved();
+        //     inventoryReserved.OrderId = context.Message.OrderId;
+        //     return await this.publishEndpoint.Send<InventoryReserved>(inventoryReserved, ctx);
+        // } else {
+        //     let orderFailed = new OrderFailed();
+        //     orderFailed.OrderId = context.Message.OrderId;
+        //     orderFailed.Reason = "Inventory not available";
+        //     return await this.publishEndpoint.Send<OrderFailed>(orderFailed, ctx);
+        // }
         return ''
     }
 }
