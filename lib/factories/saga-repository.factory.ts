@@ -37,6 +37,7 @@ export class SagaRepositoryFactory {
 
             case SagaPersistenceType.MongoDB:
                 this.logger.log('[RepositoryFactory] Creating MongoDB saga repository');
+                this.logger.log(`[RepositoryFactory] MongoDB connection available: ${!!mongoConnection}`);
                 if (!mongoConnection) {
                     this.logger.error('[RepositoryFactory] MongoDB connection not available');
                     throw new Error(

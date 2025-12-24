@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.3.1] - 2025-12-24
+My birthday - Supported saga state persistent
+
 ## [0.3.0] - 2025-12-22
 
 ### Documentation

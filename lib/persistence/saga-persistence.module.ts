@@ -103,62 +103,88 @@ export class SagaPersistenceModule {
         ];
 
         // Add database-specific connection providers
-        if (moduleOptions.type === SagaPersistenceType.MongoDB) {
-            providers.push({
-                provide: MONGODB_CONNECTION,
-                useFactory: async () => {
-                    const mongoose = require('mongoose');
-                    const connection = await mongoose.createConnection(
-                        moduleOptions.connection?.uri || 'mongodb://localhost:27017',
-                        {
-                            dbName: moduleOptions.connection?.database || 'bustransit',
-                            maxPoolSize: moduleOptions.connection?.poolSize || 10,
-                            ssl: moduleOptions.connection?.ssl || false,
-                            serverSelectionTimeoutMS: moduleOptions.connection?.connectionTimeout || 5000
+        switch (moduleOptions.type) {
+            case SagaPersistenceType.MongoDB:
+                providers.push({
+                    provide: MONGODB_CONNECTION,
+                    useFactory: async () => {
+                        const { Logger } = require('@nestjs/common');
+                        const logger = new Logger('SagaPersistenceModule');
+
+                        logger.log('[MongoDB] Initializing MongoDB connection for saga persistence...');
+                        logger.log(`[MongoDB] Config: ${moduleOptions.connection?.uri?.replace(/\/\/([^:]+):([^@]+)@/, '//$1:****@')}`);
+                        logger.log(`[MongoDB] Database: ${moduleOptions.connection?.database || 'bustransit'}`);
+
+                        const mongoose = require('mongoose');
+
+                        try {
+                            const connection = await mongoose.connect(
+                                moduleOptions.connection?.uri,
+                                {
+                                    dbName: moduleOptions.connection?.database || 'bustransit',
+                                    serverApi: { version: '1', strict: true, deprecationErrors: true },
+                                    ...moduleOptions.tlsOptions,
+                                }
+                            );
+                            await mongoose.connection.db.admin().command({ ping: 1 });
+
+                            logger.log('[MongoDB] Connection established successfully');
+                            logger.log('[MongoDB] Pinged deployment successfully');
+                            logger.log(`[MongoDB] Collection '${moduleOptions.connection?.collectionName || 'saga_states'}' should be ready`);
+                            return connection;
+                        } catch (error) {
+                            logger.error('[MongoDB] Failed to initialize connection:', error.message);
+                            throw error;
                         }
-                    ).asPromise();
-                    return connection;
-                }
-            });
-        } else if (moduleOptions.type === SagaPersistenceType.PostgreSQL) {
-            providers.push({
-                provide: POSTGRESQL_CONNECTION,
-                useFactory: async () => {
-                    const { Logger } = require('@nestjs/common');
-                    const logger = new Logger('SagaPersistenceModule');
-
-                    logger.log('[PostgreSQL] Initializing PostgreSQL connection for saga persistence...');
-                    logger.log(`[PostgreSQL] Config: ${moduleOptions.connection?.host}:${moduleOptions.connection?.port}/${moduleOptions.connection?.database}`);
-                    logger.log(`[PostgreSQL] Auto-create schema: ${moduleOptions.autoCreateSchema !== false}`);
-
-                    const { DataSource } = require('typeorm');
-                    const { SagaStateEntity } = require('./models/postgresql/saga-state.entity');
-
-                    const dataSource = new DataSource({
-                        type: 'postgres',
-                        host: moduleOptions.connection?.host || 'localhost',
-                        port: moduleOptions.connection?.port || 5432,
-                        username: moduleOptions.connection?.username,
-                        password: moduleOptions.connection?.password,
-                        database: moduleOptions.connection?.database || 'bustransit',
-                        schema: moduleOptions.connection?.schema || 'public',
-                        entities: [SagaStateEntity],
-                        synchronize: moduleOptions.autoCreateSchema !== false,
-                        ssl: moduleOptions.connection?.ssl || false,
-                        logging: true
-                    });
-
-                    try {
-                        await dataSource.initialize();
-                        logger.log('[PostgreSQL] Connection established successfully');
-                        logger.log('[PostgreSQL] Table saga_states should be ready');
-                        return dataSource;
-                    } catch (error) {
-                        logger.error('[PostgreSQL] Failed to initialize connection:', error.message);
-                        throw error;
                     }
-                }
-            });
+                });
+                break;
+
+            case SagaPersistenceType.PostgreSQL:
+                providers.push({
+                    provide: POSTGRESQL_CONNECTION,
+                    useFactory: async () => {
+                        const { Logger } = require('@nestjs/common');
+                        const logger = new Logger('SagaPersistenceModule');
+
+                        logger.log('[PostgreSQL] Initializing PostgreSQL connection for saga persistence...');
+                        logger.log(`[PostgreSQL] Config: ${moduleOptions.connection?.host}:${moduleOptions.connection?.port}/${moduleOptions.connection?.database}`);
+                        logger.log(`[PostgreSQL] Auto-create schema: ${moduleOptions.autoCreateSchema !== false}`);
+
+                        const { DataSource } = require('typeorm');
+                        const { SagaStateEntity } = require('./models/postgresql/saga-state.entity');
+
+                        const dataSource = new DataSource({
+                            type: 'postgres',
+                            host: moduleOptions.connection?.host || 'localhost',
+                            port: moduleOptions.connection?.port || 5432,
+                            username: moduleOptions.connection?.username,
+                            password: moduleOptions.connection?.password,
+                            database: moduleOptions.connection?.database || 'bustransit',
+                            schema: moduleOptions.connection?.schema || 'public',
+                            entities: [SagaStateEntity],
+                            synchronize: moduleOptions.autoCreateSchema !== false,
+                            ssl: moduleOptions.connection?.ssl || false,
+                            logging: true
+                        });
+
+                        try {
+                            await dataSource.initialize();
+                            logger.log('[PostgreSQL] Connection established successfully');
+                            logger.log('[PostgreSQL] Table saga_states should be ready');
+                            return dataSource;
+                        } catch (error) {
+                            logger.error('[PostgreSQL] Failed to initialize connection:', error.message);
+                            throw error;
+                        }
+                    }
+                });
+                break;
+
+            case SagaPersistenceType.InMemory:
+            case SagaPersistenceType.Custom:
+                // No connection provider needed for InMemory or Custom
+                break;
         }
 
         // Repository factory provider
@@ -259,28 +285,56 @@ export class SagaPersistenceModule {
             }
         ];
 
-        // MongoDB connection provider
+        // Database connection providers (always register both with optional support)
         providers.push({
             provide: MONGODB_CONNECTION,
             useFactory: async (opts: SagaPersistenceOptions) => {
                 if (opts.type !== SagaPersistenceType.MongoDB) return null;
 
+                const { Logger } = require('@nestjs/common');
+                const logger = new Logger('SagaPersistenceModule');
+
+                logger.log('[MongoDB] Initializing MongoDB connection for saga persistence (async)...');
+                logger.log(`[MongoDB] Config: ${opts.connection?.uri?.replace(/\/\/([^:]+):([^@]+)@/, '//$1:****@')}`);
+                logger.log(`[MongoDB] Database: ${opts.connection?.database || 'bustransit'}`);
+
                 const mongoose = require('mongoose');
-                const connection = await mongoose.createConnection(
-                    opts.connection?.uri || 'mongodb://localhost:27017',
-                    {
-                        dbName: opts.connection?.database || 'bustransit',
-                        maxPoolSize: opts.connection?.poolSize || 10,
-                        ssl: opts.connection?.ssl || false,
-                        serverSelectionTimeoutMS: opts.connection?.connectionTimeout || 5000
-                    }
-                ).asPromise();
-                return connection;
+
+                try {
+                    const connection = await mongoose.connect(
+                        opts.connection?.uri || 'mongodb://localhost:27017',
+                        {
+                            dbName: opts.connection?.database || 'bustransit',
+                            serverApi: { version: '1', strict: true, deprecationErrors: true },
+                            ...opts.connection,
+                            ...opts.tlsOptions,
+                        }
+                    );
+
+                    // Set up connection event listeners
+                    mongoose.connection.on('connected', () => logger.log('[MongoDB] Connection event: connected'));
+                    mongoose.connection.on('open', () => logger.log('[MongoDB] Connection event: open'));
+                    mongoose.connection.on('disconnected', () => logger.warn('[MongoDB] Connection event: disconnected'));
+                    mongoose.connection.on('reconnected', () => logger.log('[MongoDB] Connection event: reconnected'));
+                    mongoose.connection.on('disconnecting', () => logger.log('[MongoDB] Connection event: disconnecting'));
+                    mongoose.connection.on('close', () => logger.log('[MongoDB] Connection event: close'));
+                    mongoose.connection.on('error', (err: Error) => logger.error('[MongoDB] Connection error:', err.message));
+
+                    // Verify connection with ping
+                    await mongoose.connection.db.admin().command({ ping: 1 });
+
+                    logger.log('[MongoDB] Connection established successfully (async)');
+                    logger.log('[MongoDB] Pinged deployment successfully');
+                    logger.log(`[MongoDB] Collection '${opts.connection?.collectionName || 'saga_states'}' should be ready`);
+                    return connection;
+                } catch (error) {
+                    logger.error('[MongoDB] Failed to initialize connection (async):', error.message);
+                    throw error;
+                }
             },
             inject: [SAGA_PERSISTENCE_OPTIONS]
         });
 
-        // PostgreSQL connection provider
         providers.push({
             provide: POSTGRESQL_CONNECTION,
             useFactory: async (opts: SagaPersistenceOptions) => {

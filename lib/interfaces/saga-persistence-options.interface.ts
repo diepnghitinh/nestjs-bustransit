@@ -4,6 +4,50 @@ import { ISagaRepository } from './saga-repository.interface';
 import { ISagaSerializer } from './saga-serializer.interface';
 
 /**
+ * SSL/TLS configuration options (MongoDB)
+ */
+export interface SagaPersistenceTLSOptions {
+    /**
+     * Enable TLS/SSL connections
+     * @default false
+     */
+    ssl?: boolean;
+
+    /**
+     * Enable TLS connections (preferred over ssl)
+     * @default false
+     */
+    tls?: boolean;
+
+    /**
+     * Allow invalid TLS certificates (for development/testing only)
+     * @default false
+     */
+    tlsAllowInvalidCertificates?: boolean;
+
+    /**
+     * Path to the TLS certificate key file
+     */
+    tlsCertificateKeyFile?: string;
+
+    /**
+     * Path to the TLS certificate authority file
+     */
+    tlsCAFile?: string;
+
+    /**
+     * Allow invalid TLS hostnames (for development/testing only)
+     * @default false
+     */
+    tlsAllowInvalidHostnames?: boolean;
+
+    /**
+     * TLS certificate key file password
+     */
+    tlsCertificateKeyFilePassword?: string;
+}
+
+/**
  * Connection configuration for database persistence
  */
 export interface SagaPersistenceConnectionOptions {
@@ -19,10 +63,10 @@ export interface SagaPersistenceConnectionOptions {
     password?: string;
     schema?: string;
     tableName?: string;
+    ssl?: boolean; // PostgreSQL SSL option
 
     // Common options
     poolSize?: number;
-    ssl?: boolean;
     connectionTimeout?: number;
 }
 
@@ -63,6 +107,11 @@ export interface SagaPersistenceOptions {
      * Connection configuration (type-specific)
      */
     connection?: SagaPersistenceConnectionOptions;
+
+    /**
+     * TLS/SSL configuration options (MongoDB only)
+     */
+    tlsOptions?: SagaPersistenceTLSOptions;
 
     /**
      * Custom repository instance
