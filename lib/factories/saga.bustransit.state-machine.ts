@@ -33,25 +33,33 @@ export class BusTransitStateMachine<TState extends object> extends BusTransitCon
     private autoArchive: boolean = false;
 
     constructor(
-        stateClass: { new(...args: any[]): TState },
-        repository?: ISagaRepository<any>,
-        options?: SagaPersistenceOptions
+        stateClass: { new(...args: any[]): TState } | {
+            stateClass: { new(...args: any[]): TState },
+            repository?: ISagaRepository<any>,
+            options?: SagaPersistenceOptions
+        }
     ) {
-        super(stateClass);
-        this._classMessage = stateClass;
+        // Handle both forms: direct class or config object
+        const isConfigObject = stateClass && 'stateClass' in stateClass;
+        const actualStateClass = isConfigObject ? stateClass.stateClass : stateClass as { new(...args: any[]): TState };
+        const repository = isConfigObject ? stateClass.repository : undefined;
+        const options = isConfigObject ? stateClass.options : undefined;
+
+        super(actualStateClass);
+        this._classMessage = actualStateClass;
 
         // Use provided repository or fallback to in-memory (backward compatibility)
         this.repository = repository || new InMemorySagaRepository<any>();
 
         // Set state class on repository for deserialization
         if (this.repository['setStateClass']) {
-            this.repository['setStateClass'](stateClass);
+            this.repository['setStateClass'](actualStateClass);
         }
 
         // Configure auto-archive from options
         this.autoArchive = options?.autoArchive || false;
 
-        Logger.log(`[SG] Saga state machine ${stateClass.name} initialized with ${repository ? repository.constructor.name : 'in-memory'} repository`);
+        Logger.log(`[SG] Saga state machine ${actualStateClass.name} initialized with ${repository ? repository.constructor.name : 'in-memory'} repository`);
     }
 
     get GetEvents(): any {
@@ -78,7 +86,7 @@ export class BusTransitStateMachine<TState extends object> extends BusTransitCon
         (when as EventActivityBinder<TState, any>).addPreviousState(this.StateFinalize);
     }
 
-    During<T>(duringClass: IState, listens: IEventActivityBinder<TState, any>[]) {
+    During(duringClass: IState, listens: IEventActivityBinder<TState, any>[]) {
         Logger.verbose((duringClass as SagaState<any>).Name )
         for (const element of listens) {
             let sagaState = element as EventActivityBinder<TState, any>

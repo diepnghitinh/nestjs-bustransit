@@ -73,7 +73,7 @@ export class BusTransitCoreModule implements OnApplicationBootstrap, OnApplicati
                 return {
                     provide: machineClass,
                     useFactory: (repository?: any, options?: any) => {
-                        return new machineClass(stateClass, repository, options);
+                        return new machineClass({ stateClass, repository, options });
                     },
                     inject: [
                         { token: SAGA_REPOSITORY, optional: true },

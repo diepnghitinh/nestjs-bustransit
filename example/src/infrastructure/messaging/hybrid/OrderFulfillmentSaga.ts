@@ -116,8 +116,8 @@ export class OrderFulfillmentSaga extends BusTransitStateMachine<OrderFulfillmen
     ShippingArranged = new SagaEvent(ShippingArranged);
     ShippingFailed = new SagaEvent(ShippingFailed);
 
-    constructor(stateClass?: any, repository?: any, options?: any) {
-        super(stateClass || OrderFulfillmentState, repository, options);
+    constructor(stateClass?: any) {
+        super(stateClass || OrderFulfillmentState);
 
         // Configure event correlation
         this.Event(this.OrderSubmittedForFulfillment, x => x.CorrelateById(m => m.Message.OrderId));
