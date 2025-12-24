@@ -18,6 +18,7 @@ export class ReserveInventoryConsumer extends BusTransitConsumer<ReserveInventor
         await super.Consume(ctx, context)
 
         const randomRate = Math.random();
+        
         if (randomRate > 0.5) {
             let inventoryReserved = new InventoryReserved();
             inventoryReserved.OrderId = context.Message.OrderId;

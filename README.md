@@ -8,6 +8,7 @@ A powerful NestJS library for building reliable distributed systems with **Rabbi
 - **[🛠️ Setup Guide](./docs/ROUTING_SLIPS_SETUP.md)** - Installation and configuration details
 - **[📘 Routing Slips Guide](./docs/ROUTING_SLIPS.md)** - Activity-based workflow orchestration
 - **[📕 Saga Compensation Guide](./docs/COMPENSATION.md)** - Event-driven state machine compensation
+- **[💾 Saga Persistence Guide](./docs/SAGA_PERSISTENCE.md)** - Production-ready state persistence
 - **[⚙️ Retry Strategies](./docs/RETRY_STRATEGIES.md)** - Handle failures gracefully
 - **[👨‍💻 Code Examples](./example/src/infrastructure/messaging/)** - Full working examples
 
@@ -19,6 +20,7 @@ This library offers:
 
 * **Easy NestJS Integration:** Leveraging NestJS features like dependency injection, decorators, and modules for seamless Service Bus configuration and usage.
 * **Saga Pattern Implementation:** Provides tools and structures to define, execute, and monitor Sagas, ensuring data consistency even when failures occur.
+* **Production-Ready Saga Persistence:** Database-backed state management with support for MongoDB, PostgreSQL, and in-memory storage, including optimistic locking and auto-archiving.
 * **Routing Slips Pattern:** Activity-based workflow coordination with automatic compensation for distributed transactions.
 * **Comprehensive Retry Strategies:** Four retry strategies (Immediate, Interval, Intervals, Exponential) at two levels (Retry + Redelivery).
 * **RabbitMQ Powered:** Utilizes RabbitMQ's performance and reliability as the message transport layer, supporting queuing, routing, and publish/subscribe.
@@ -40,6 +42,7 @@ yarn add nestjs-bustransit uuid
 - [x] Retry Level 2 (Redelivery with all strategies)
 - [x] Saga pattern
 - [x] Saga compensation
+- [x] Saga state persistence (MongoDB, PostgreSQL, In-Memory)
 - [x] Routing slips pattern
 - [ ] Kafka broker
 
@@ -84,6 +87,44 @@ Event-driven state machines with automatic compensation. Build complex workflows
 **[→ View Saga Examples](./example/src/infrastructure/messaging/sagas/)**
 
 ![Saga Workflow](./docs/saga.png)
+
+### 💾 Saga State Persistence
+
+Production-ready state management for saga state machines with database persistence. Persist saga state across application restarts with support for multiple storage backends.
+
+**Key Features:**
+- Multiple storage adapters (InMemory, MongoDB, PostgreSQL)
+- Optimistic locking for concurrent updates
+- Auto-archiving with configurable TTL
+- Retry logic with exponential backoff
+- Backward compatible (defaults to in-memory)
+- Async configuration support
+
+**[→ Read the Saga Persistence Guide](./docs/SAGA_PERSISTENCE.md)**
+**[→ Configuration Guide](./docs/SAGA_PERSISTENCE_CONFIGURATION.md)**
+**[→ Migration Guide](./docs/SAGA_PERSISTENCE_MIGRATION.md)**
+
+```typescript
+// Configure persistence for production
+@Module({
+  imports: [
+    SagaPersistenceModule.forRoot({
+      type: SagaPersistenceType.MongoDB,
+      connection: {
+        uri: 'mongodb://localhost:27017',
+        database: 'bustransit',
+        collectionName: 'saga_states'
+      },
+      autoArchive: true,
+      archiveTTL: 86400 * 30 // 30 days
+    }),
+    BusTransit.AddBusTransit.setUp(bus => {
+      bus.AddSagaStateMachine(OrderStateMachine, OrderState);
+    })
+  ]
+})
+export class AppModule {}
+```
 
 ### 📋 Routing Slips Pattern
 

@@ -11,7 +11,7 @@ import {ProcessPaymentConsumer} from "@infrastructure/messaging/sagas/ProcessPay
 import {ReserveInventoryConsumer} from "@infrastructure/messaging/sagas/ReserveInventoryConsumer";
 import {OrderRefundConsumer} from "@infrastructure/messaging/sagas/OrderRefundConsumer";
 import {OrderConfirmedConsumer} from "@infrastructure/messaging/sagas/OrderConfirmedConsumer";
-import { BusTransit, RoutingSlipBusConfigurator } from 'nestjs-bustransit';
+import { BusTransit, RoutingSlipBusConfigurator, SagaPersistenceModule, SagaPersistenceType } from 'nestjs-bustransit';
 import { ProcessPaymentActivity } from '@infrastructure/messaging/routing-slips/activities/ProcessPaymentActivity';
 import { ReserveInventoryActivity } from '@infrastructure/messaging/routing-slips/activities/ReserveInventoryActivity';
 import { SendConfirmationActivity } from '@infrastructure/messaging/routing-slips/activities/SendConfirmationActivity';
@@ -22,6 +22,28 @@ const configService = new ConfigService();
 @Global()
 @Module({
     imports: [
+        // SagaPersistenceModule.forRoot({
+        //     type: SagaPersistenceType.MongoDB,
+        //     connection: {
+        //         uri: 'mongodb+srv://d3companyproduct_db_user:X347Ic74sGR0DTbI@cluster0.yt2jklc.mongodb.net/?appName=Cluster0',
+        //         database: 'bustransit',
+        //         collectionName: 'saga_states'
+        //     },
+        //     autoArchive: true,
+        //     archiveTTL: 86400 * 30 // 30 days
+        // }),
+        // Or use PostgreSQL
+        // SagaPersistenceModule.forRoot({
+        //     type: SagaPersistenceType.PostgreSQL,
+        //     connection: {
+        //     host: 'localhost',
+        //     port: 5432,
+        //     username: 'postgres',
+        //     password: 'postgres',
+        //     database: 'bustransit'
+        //     },
+        //     autoArchive: true
+        // }),
         BusTransit.AddBusTransit.setUp((x) => {
 
             x.AddConsumer(SubmitOrderConsumer,);

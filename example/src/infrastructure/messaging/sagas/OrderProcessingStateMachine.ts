@@ -58,8 +58,8 @@ export class OrderStateMachine extends BusTransitStateMachine<OrderState> {
     InventoryReserved = new SagaEvent(InventoryReserved);
     OrderFailed = new SagaEvent(OrderFailed);
 
-    constructor() {
-        super(OrderState);
+    constructor(stateClass?: any) {
+        super(stateClass || OrderState);
 
         // Define all Events
         this.Event(this.OrderSubmitted, x => x.CorrelateById(m => m.Message.OrderId));

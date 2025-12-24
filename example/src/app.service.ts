@@ -3,6 +3,7 @@ import {OrderSubmitted} from "@infrastructure/messaging/sagas/OrderProcessingSta
 import { v7 as uuidv7 } from 'uuid';
 import {OrderMessage} from "@infrastructure/messaging/consumers/SubmitOrderConsumer";
 import { OrderProcessingService } from '@infrastructure/messaging/routing-slips/OrderProcessingService';
+import { HybridPatternService } from '@infrastructure/messaging/hybrid/HybridPatternService';
 import { IPublishEndpoint } from 'nestjs-bustransit';
 
 @Injectable()
@@ -11,6 +12,7 @@ export class AppService {
       @Inject(IPublishEndpoint)
       private readonly publishEndpoint: IPublishEndpoint,
       private readonly orderProcessingService: OrderProcessingService,
+      private readonly hybridPatternService: HybridPatternService,
   ) {
   }
 
@@ -140,6 +142,53 @@ export class AppService {
         failedActivity: 'SendConfirmation',
         compensatedActivities: ['ReserveInventory', 'ProcessPayment'],
         note: 'Check the logs to see the failure and compensation sequence'
+      };
+    }
+  }
+
+  /**
+   * Test Hybrid Pattern - Saga + Routing Slips
+   * Demonstrates: combining saga pattern for workflow orchestration with routing slips for complex operations
+   */
+  async testHybridPattern(): Promise<any> {
+    const orderId = uuidv7();
+
+    try {
+      await this.hybridPatternService.submitOrder(
+        orderId,
+        'customer_456',
+        'customer@example.com',
+        299.99,
+        [
+          { sku: 'WIDGET-001', quantity: 3 },
+          { sku: 'GADGET-002', quantity: 1 },
+          { sku: 'TOOL-003', quantity: 2 }
+        ]
+      );
+
+      return {
+        success: true,
+        message: 'Hybrid pattern demonstration started',
+        orderId,
+        pattern: {
+          saga: {
+            description: 'Manages high-level order fulfillment workflow',
+            states: ['Submitted', 'Fulfilling', 'Shipping', 'Completed']
+          },
+          routingSlip: {
+            description: 'Handles multi-step fulfillment process within saga',
+            activities: ['PickItems', 'PackItems', 'GenerateShippingLabel', 'QualityCheck'],
+            compensation: 'Each activity can be undone if a later step fails'
+          }
+        },
+        note: 'Check the logs to see the saga state transitions and routing slip execution'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: 'Hybrid pattern execution failed',
+        orderId,
+        error: error.message
       };
     }
   }

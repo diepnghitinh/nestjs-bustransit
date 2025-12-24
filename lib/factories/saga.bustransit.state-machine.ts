@@ -1,7 +1,7 @@
 import {IBusTransitStateMachine} from "../interfaces/saga.bustransit.state-machine.interface";
 import {EventActivityBinder} from "./event.activity-binder";
 import {BusTransitConsumer} from "./consumer";
-import {Injectable, Logger} from "@nestjs/common";
+import {Injectable, Logger, Optional, Inject} from "@nestjs/common";
 import {SagaState} from "./saga.state";
 import {BehaviorContext} from "./behavior.context";
 import {IEventActivityBinder} from "../interfaces/event.activity-binder.interface";
@@ -12,6 +12,10 @@ import {EventCorrelationConfigurator} from "./event.correlation.configurator";
 import {SagaStateMachineInstance} from "./saga.state-machine-instance";
 import {IEvent, IState} from "../interfaces/saga";
 import {bufferToStringJson, getLastPart} from "../utils/utils";
+import {ISagaRepository} from "../interfaces/saga-repository.interface";
+import {SAGA_REPOSITORY, SAGA_PERSISTENCE_OPTIONS} from "../constants/saga-persistence.constants";
+import {SagaPersistenceOptions} from "../interfaces/saga-persistence-options.interface";
+import {InMemorySagaRepository} from "../persistence/repositories/in-memory-saga.repository";
 
 export class BusTransitStateMachine<TState extends object> extends BusTransitConsumer<TState> implements IBusTransitStateMachine<TState>, IEventActivities<TState> {
 
@@ -25,12 +29,37 @@ export class BusTransitStateMachine<TState extends object> extends BusTransitCon
     private _eventsSelector = {};
     private _workflow = {}
     private _finalized;
+    private repository: ISagaRepository<any>;
+    private autoArchive: boolean = false;
 
     constructor(
-        stateClass: { new(...args: any[]): TState },
+        stateClass: { new(...args: any[]): TState } | {
+            stateClass: { new(...args: any[]): TState },
+            repository?: ISagaRepository<any>,
+            options?: SagaPersistenceOptions
+        }
     ) {
-        super(stateClass);
-        this._classMessage = stateClass;
+        // Handle both forms: direct class or config object
+        const isConfigObject = stateClass && 'stateClass' in stateClass;
+        const actualStateClass = isConfigObject ? stateClass.stateClass : stateClass as { new(...args: any[]): TState };
+        const repository = isConfigObject ? stateClass.repository : undefined;
+        const options = isConfigObject ? stateClass.options : undefined;
+
+        super(actualStateClass);
+        this._classMessage = actualStateClass;
+
+        // Use provided repository or fallback to in-memory (backward compatibility)
+        this.repository = repository || new InMemorySagaRepository<any>();
+
+        // Set state class on repository for deserialization
+        if (this.repository['setStateClass']) {
+            this.repository['setStateClass'](actualStateClass);
+        }
+
+        // Configure auto-archive from options
+        this.autoArchive = options?.autoArchive || false;
+
+        Logger.log(`[SG] Saga state machine ${actualStateClass.name} initialized with ${repository ? repository.constructor.name : 'in-memory'} repository`);
     }
 
     get GetEvents(): any {
@@ -57,7 +86,7 @@ export class BusTransitStateMachine<TState extends object> extends BusTransitCon
         (when as EventActivityBinder<TState, any>).addPreviousState(this.StateFinalize);
     }
 
-    During<T>(duringClass: IState, listens: IEventActivityBinder<TState, any>[]) {
+    During(duringClass: IState, listens: IEventActivityBinder<TState, any>[]) {
         Logger.verbose((duringClass as SagaState<any>).Name )
         for (const element of listens) {
             let sagaState = element as EventActivityBinder<TState, any>
@@ -88,19 +117,24 @@ export class BusTransitStateMachine<TState extends object> extends BusTransitCon
 
         // Mapping event, get custom CorrelationId
         this._eventsSelector[receiveEvent](new EventCorrelationConfigurator(ctx)); // mapping CorrelationId, ex: Event(this.OrderSubmitted, x => x.CorrelateById(m => m.Message.OrderId))
-        // if (!this.sagaStore[ctx.Saga.CorrelationId]) {
-        //     // ctx.Saga.CurrentState = this.StateInitially.Name;
-        //     // this.sagaStore[ctx.Saga.CorrelationId] = ctx.Saga;
-        // } else {
-        //     // ctx.Saga = this.sagaStore[ctx.Saga.CorrelationId];
-        // }
-        if (!ctx.Saga.CurrentState) {
+
+        // Load existing saga or create new one
+        const existingSaga = await this.repository.findByCorrelationId(ctx.Saga.CorrelationId);
+        if (existingSaga) {
+            ctx.Saga = existingSaga;
+            Logger.log(`[SG] Loaded existing saga: ${ctx.Saga.CorrelationId}, State: ${ctx.Saga.CurrentState}`);
+        } else {
             ctx.Saga.CurrentState = this.StateInitially.Name;
+            Logger.log(`[SG] Created new saga: ${ctx.Saga.CorrelationId}`);
         }
 
-        Logger.log(`[SG] ****** Receive Event: ` + receiveEvent + ', CorrelationId: ' + ctx.Saga.CorrelationId);
-        //Logger.log(`[SG] SagaState current: ${ctx.Saga.CurrentState} , msg: ${JSON.stringify(this.sagaStore[ctx.Saga.CorrelationId])}`)
-        Logger.log(`[SG] SagaState current: ${ctx.Saga.CurrentState} , msg: ${JSON.stringify(ctx.Saga)}`)
+        Logger.log(`\n${'='.repeat(80)}`);
+        Logger.log(`[SG] ******* SAGA EVENT RECEIVED *******`);
+        Logger.log(`[SG] Event: ${receiveEvent}`);
+        Logger.log(`[SG] Correlation ID: ${ctx.Saga.CorrelationId}`);
+        Logger.log(`[SG] Current State: ${ctx.Saga.CurrentState}`);
+        Logger.log(`[SG] Repository Type: ${this.repository.constructor.name}`);
+        Logger.log(`${'='.repeat(80)}\n`);
 
         // Check event in State
         if ([this.StateInitially.Name].includes(ctx.Saga.CurrentState) == false && !currentState.previousStates[ctx.Saga.CurrentState]) {
@@ -109,19 +143,43 @@ export class BusTransitStateMachine<TState extends object> extends BusTransitCon
 
         // Run step workflow
         if (currentState.stepThen) {
+            Logger.log(`[SG] Step 1/4: Executing workflow step (.Then logic)...`);
             currentState.stepThen(ctx as any)
+            Logger.log(`[SG] Step 1/4: ✓ Workflow step completed`);
         }
 
         if (currentState.transitionTo) {
-            Logger.log(`[SG] Event ${receiveEvent} => TransitionTo ${currentState.transitionTo.Name}`)
+            Logger.log(`[SG] Step 2/4: Transitioning state...`);
+            Logger.log(`[SG]   From: ${ctx.Saga.CurrentState}`);
+            Logger.log(`[SG]   To:   ${currentState.transitionTo.Name}`);
             ctx.Saga.CurrentState = currentState.transitionTo.Name;
+            Logger.log(`[SG] Step 2/4: ✓ State transition completed`);
+        }
+
+        // Save saga state BEFORE publishing next message
+        try {
+            Logger.log(`[SG] Step 3/4: Saving saga state to database...`);
+            Logger.log(`[SG]   Repository: ${this.repository.constructor.name}`);
+            Logger.log(`[SG]   Correlation ID: ${ctx.Saga.CorrelationId}`);
+            Logger.log(`[SG]   State: ${ctx.Saga.CurrentState}`);
+            Logger.log(`[SG]   Data: ${JSON.stringify(ctx.Saga)}`);
+
+            await this.repository.save(ctx.Saga);
+
+            Logger.log(`[SG] Step 3/4: ✓ Saga state saved successfully`);
+        } catch (error) {
+            Logger.error(`[SG] Step 3/4: ✗ Failed to save saga state`, error);
+            throw error;
         }
 
         let getResult = true;
         if (currentState.publishAsync) {
+            Logger.log(`[SG] Step 4/4: Publishing next message...`);
             ctx.producerClient = super.producer;
             const msg = await currentState.publishAsync(ctx as any)
+            Logger.log(`[SG]   Message type: ${msg.constructor.name}`);
             getResult = await ctx.producerClient.Send(msg, ctx);
+            Logger.log(`[SG] Step 4/4: ✓ Message published successfully`);
         }
 
         // console.log('Node ' + process.env.PORT)
@@ -132,6 +190,16 @@ export class BusTransitStateMachine<TState extends object> extends BusTransitCon
             ctx.Saga.CurrentState = this.StateFinalize.Name;
             Logger.log(`[SG] Saga CorrelationId: ${ctx.Saga.CorrelationId} is released`)
             this._finalized(ctx);
+
+            // Archive or delete based on configuration
+            if (this.autoArchive) {
+                await this.repository.archive(ctx.Saga.CorrelationId);
+                Logger.log(`[SG] Archived saga: ${ctx.Saga.CorrelationId}`);
+            } else {
+                await this.repository.delete(ctx.Saga.CorrelationId);
+                Logger.log(`[SG] Deleted saga: ${ctx.Saga.CorrelationId}`);
+            }
+
             if (this.setCompletedWhenFinalized) return getResult;
         }
 

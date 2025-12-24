@@ -132,4 +132,57 @@ export class AppController {
       };
     }
   }
+
+  /**
+   * Demo endpoint for Hybrid Pattern (Saga + Routing Slips)
+   *
+   * This endpoint demonstrates combining the Saga pattern with Routing Slips:
+   *
+   * SAGA PATTERN:
+   * - Manages high-level order fulfillment workflow
+   * - States: Submitted → Fulfilling → Shipping → Completed
+   * - Coordinates multiple services (warehouse, shipping, notification)
+   * - Long-running transaction spanning multiple steps
+   *
+   * ROUTING SLIP PATTERN (within saga):
+   * - Handles complex multi-step fulfillment process
+   * - Activities: PickItems → PackItems → GenerateShippingLabel → QualityCheck
+   * - Each activity supports compensation (automatic undo on failure)
+   * - Fine-grained control over operational steps
+   *
+   * BENEFITS OF HYBRID APPROACH:
+   * 1. Saga provides business workflow orchestration
+   * 2. Routing slips provide operational detail and compensation
+   * 3. Clear separation of concerns
+   * 4. Best of both patterns
+   *
+   * The workflow executes:
+   * 1. Saga receives OrderSubmittedForFulfillment event
+   * 2. Saga publishes ExecuteFulfillment command
+   * 3. Consumer executes routing slip: Pick → Pack → Label → QualityCheck
+   * 4. If routing slip succeeds, saga moves to shipping
+   * 5. If routing slip fails, activities are compensated automatically
+   * 6. Saga receives result and continues or fails accordingly
+   *
+   * Check the logs to see:
+   * - Saga state transitions
+   * - Routing slip activity execution
+   * - Compensation if failures occur
+   * - Complete workflow coordination
+   *
+   * @returns Object showing hybrid pattern execution details
+   */
+  @Get('test-hybrid-pattern')
+  async hybridPatternTest(): Promise<any> {
+    try {
+      const result = await this.appService.testHybridPattern();
+      return result;
+    } catch (e) {
+      return {
+        success: false,
+        message: "Hybrid pattern test failed",
+        error: e.message
+      };
+    }
+  }
 }

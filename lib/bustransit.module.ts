@@ -17,12 +17,12 @@ export namespace BusTransit {
     export class AddBusTransit implements IAddBusTransit {
 
         private _rabbitMqBusFactoryConfigurator: RabbitMqBusFactoryConfigurator;
-        private _consumers = {};
-        private _consumersBindQueue = {};
-        private _messagesBindQueue = {};
+        private _consumers: Record<string, any> = {};
+        private _consumersBindQueue: Record<string, any> = {};
+        private _messagesBindQueue: Record<string, any> = {};
 
         /* name : consumer object */
-        private _sagasConsumers = {}; // Now: support exchange from saga
+        private _sagasConsumers: Record<string, any> = {}; // Now: support exchange from saga
 
         static setUp(busCfg: (x: IAddBusTransit) => void): DynamicModule {
             const _instance = new AddBusTransit();
@@ -71,7 +71,8 @@ export namespace BusTransit {
             stateClass: new (...args: any[]) => TSaga,
         ): IConsumerRegistrationConfigurator<TSagaMachine> {
             Logger.debug(`** Added SagaMachine [${stateClass.name}]`)
-            this._consumers[machineClass.name] = machineClass;
+            // Store both machine and state class for factory provider creation
+            this._consumers[machineClass.name] = { machineClass, stateClass };
             this._sagasConsumers[stateClass.name] = machineClass;
             let cfg = new ConsumerRegistrationConfigurator(machineClass);
             return cfg;

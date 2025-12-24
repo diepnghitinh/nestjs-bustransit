@@ -27,7 +27,8 @@
       "Bash(node:*)",
       "Bash(for i in {1..5})",
       "Bash(do echo \"=== Attempt $i ===\")",
-      "Bash(done)"
+      "Bash(done)",
+      "Bash(timeout 15 npm run start:dev:*)"
     ],
     "deny": [],
     "ask": []

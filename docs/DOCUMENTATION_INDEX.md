@@ -26,6 +26,27 @@ Complete documentation for the NestJS BusTransit library - a powerful service bu
   - Complex state management
   - Event-driven architectures
 
+- **[Saga State Persistence](./SAGA_PERSISTENCE.md)** - Production-ready saga state storage ⭐
+  - MongoDB, PostgreSQL, and in-memory adapters
+  - Automatic archiving with configurable TTL
+  - Optimistic locking and retry logic
+  - Backward compatible (defaults to in-memory)
+  - Zero-downtime migration
+
+- **[Saga Persistence Configuration](./SAGA_PERSISTENCE_CONFIGURATION.md)** - Detailed setup guide
+  - MongoDB configuration and best practices
+  - PostgreSQL configuration and indexing
+  - Environment-based configuration with ConfigService
+  - Custom repository implementation
+  - Testing and troubleshooting
+
+- **[Saga Persistence Migration](./SAGA_PERSISTENCE_MIGRATION.md)** - Migration guide
+  - Zero-downtime migration strategy
+  - MongoDB and PostgreSQL setup
+  - Rollback procedures
+  - Testing and validation
+  - Post-migration monitoring
+
 #### Routing Slips Pattern
 - **[Routing Slips Overview](./ROUTING_SLIPS.md)** - Activity-based orchestration ⭐
   - Quick reference and API documentation
@@ -148,6 +169,7 @@ await executor.execute(routingSlip);
 | Topic | Document | Best For |
 |-------|----------|----------|
 | **Saga Compensation** | [COMPENSATION.md](./COMPENSATION.md) | Long-running processes, event-driven flows, complex state machines |
+| **Saga Persistence** | [SAGA_PERSISTENCE.md](./SAGA_PERSISTENCE.md) | Production deployments, saga state recovery, audit trails |
 | **Routing Slips** | [ROUTING_SLIPS.md](./ROUTING_SLIPS.md) | Multi-service workflows, reusable activities, dynamic orchestration |
 
 ### Resilience and Reliability
@@ -180,6 +202,8 @@ await executor.execute(routingSlip);
 - **Complex business process** → [Saga Compensation](./COMPENSATION.md)
 - **Reusable workflow components** → [Routing Slips](./ROUTING_SLIPS.md)
 - **Event-driven coordination** → [Saga Compensation](./COMPENSATION.md)
+- **Persist saga state** → [Saga Persistence](./SAGA_PERSISTENCE.md)
+- **Migrate to database storage** → [Saga Migration Guide](./SAGA_PERSISTENCE_MIGRATION.md)
 
 #### Learn Patterns
 - **What is a routing slip?** → [Routing Slips Concepts](./ROUTING_SLIPS_CONCEPTS.md)
@@ -253,16 +277,20 @@ await executor.execute(routingSlip);
 
 ## 🌟 Feature Matrix
 
-| Feature | Saga Compensation | Routing Slips |
-|---------|------------------|---------------|
-| **Automatic Compensation** | Manual trigger | ✅ Automatic on fault |
-| **Reusable Components** | ❌ Tied to saga | ✅ Reusable activities |
-| **State Persistence** | ✅ Yes | ❌ No (short-lived) |
-| **Dynamic Workflows** | ❌ Fixed state machine | ✅ Runtime composition |
-| **Event-Driven** | ✅ Yes | ❌ No |
-| **Long-Running** | ✅ Yes (persistent) | ❌ No (completes quickly) |
-| **Complexity** | Higher | Lower |
-| **Learning Curve** | Steeper | Gentler |
+| Feature | Saga Compensation | Saga Persistence | Routing Slips |
+|---------|------------------|------------------|---------------|
+| **Automatic Compensation** | Manual trigger | N/A | ✅ Automatic on fault |
+| **Reusable Components** | ❌ Tied to saga | N/A | ✅ Reusable activities |
+| **State Persistence** | ✅ Yes (with persistence module) | ✅ Core feature | ❌ No (short-lived) |
+| **Database Options** | N/A | ✅ InMemory, MongoDB, PostgreSQL | N/A |
+| **Dynamic Workflows** | ❌ Fixed state machine | N/A | ✅ Runtime composition |
+| **Event-Driven** | ✅ Yes | N/A | ❌ No |
+| **Long-Running** | ✅ Yes (with persistence) | ✅ Enables long-running | ❌ No (completes quickly) |
+| **Production Ready** | ✅ With persistence module | ✅ Yes | ✅ Yes |
+| **Optimistic Locking** | N/A | ✅ Yes (concurrent updates) | N/A |
+| **Auto-Archiving** | N/A | ✅ Yes (configurable TTL) | N/A |
+| **Complexity** | Higher | Medium | Lower |
+| **Learning Curve** | Steeper | Moderate | Gentler |
 
 ## 📝 Contributing
 
