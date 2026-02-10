@@ -158,6 +158,12 @@ export class BusTransitBrokerRabbitMqFactory extends BusTransitBrokerBaseFactory
     async createAllExchange(exchangeCreatedFromConsumers) {
         Logger.debug(`Created All Exchange`);
         const exchanges = [];
+
+
+
+        console.log('classMessageToEndpoint: ');
+        console.log(this.classMessageToEndpoint);
+
         for (const [key, consumerClass] of Object.entries(this.consumers)) {
             // Extract actual class if it's a saga consumer data object
             const consumerData = consumerClass as any;
@@ -182,9 +188,11 @@ export class BusTransitBrokerRabbitMqFactory extends BusTransitBrokerBaseFactory
 
                 for (const [event, value] of Object.entries(_busSaga.GetEvents)) {
                     const getExchange = event;
-                    this.classMessageToEndpoint[event] = new EndpointRegistrationConfigurator();
-                    this.classMessageToEndpoint[event].Name =
-                        this.classMessageToExchange[_busSaga.GetMessageClass.name];
+
+                    if (!this.classMessageToEndpoint[event]) {
+                        this.classMessageToEndpoint[event] = new EndpointRegistrationConfigurator();
+                        this.classMessageToEndpoint[event].Name = this.classMessageToExchange[_busSaga.GetMessageClass.name];
+                    }
 
                     await this.assertExchange(
                         this.channelList[this.channelProducer],
@@ -426,7 +434,7 @@ export class BusTransitBrokerRabbitMqFactory extends BusTransitBrokerBaseFactory
                                     retryPattern.pipe,
                                 )
                                 .subscribe({
-                                    next: (data) => {},
+                                    next: (data) => { },
                                     error: async (err) => {
                                         console.log(err);
                                         Logger.error('RabbitMQ Message error', err.message);
@@ -547,7 +555,7 @@ export class BusTransitBrokerRabbitMqFactory extends BusTransitBrokerBaseFactory
                             noAck: false,
                         },
                     )
-                    .then((r) => {});
+                    .then((r) => { });
             },
             {
                 exchange: {
@@ -599,7 +607,7 @@ export class BusTransitBrokerRabbitMqFactory extends BusTransitBrokerBaseFactory
         };
     }
 
-    public close() {}
+    public close() { }
 
     protected getNameAddClusterPrefix(name) {
         const _name = `${this.brokerConfig.brokerName ? `${this.brokerConfig.brokerName}:` : ''}${name}`;
@@ -611,8 +619,8 @@ export class BusTransitBrokerRabbitMqFactory extends BusTransitBrokerBaseFactory
         // Trường hợp Message không có exchange trong process thì push thẳng vào tên exchange ??
         const exchange = this.getNameAddClusterPrefix(
             this.classMessageToExchange[message.constructor.name] ??
-                this.classMessageToEndpoint[message.constructor.name]?.Name ??
-                message.constructor.name,
+            this.classMessageToEndpoint[message.constructor.name]?.Name ??
+            message.constructor.name,
         );
         const msg = {
             messageId: uuidv7(),
@@ -643,7 +651,7 @@ export class BusTransitBrokerRabbitMqFactory extends BusTransitBrokerBaseFactory
         ctx?: BehaviorContext<any, TMessage>,
     ): Promise<any> {
         const classMessage = this.classMessageToEndpoint[message.constructor.name];
-        const endpoint = classMessage.EndpointRegistrationConfigurator?.Name ?? this.classMessageToEndpoint[message.constructor.name]?.Name ?? message.constructor.name;
+        const endpoint = classMessage?.EndpointRegistrationConfigurator?.Name ?? classMessage?.Name ?? message.constructor.name;
         const correlationId = uuidv7();
         const replyQueueName = 'amq.rabbitmq.reply-to';
         const timeout = 10000;

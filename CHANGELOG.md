@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.3.2] - 2026-02-11
+Fix saga on multi node
+
 ## [0.3.1] - 2025-12-24
 My birthday - Supported saga state persistent
 
