@@ -1,4 +1,5 @@
 import {Logger} from "@nestjs/common";
+import {definedEntries, ReliabilityOptions, resolveReliability} from "./brokers/rabbitmq/reliability-options";
 import {RabbitmqHostSettings} from "./rabbitmq-host.settings";
 import {BrokerEnum} from "../interfaces/enums";
 import {RabbitMqReceiveEndpointConfigurator} from "./rabbitmq-receive-endpoint.configuator";
@@ -25,6 +26,11 @@ export class RabbitMqBusFactoryConfigurator implements IRabbitMqBusFactoryConfig
 
     public setClusterName(name) {
         this.options.brokerName = name;
+    }
+
+    UseReliability(options: Partial<ReliabilityOptions>): void {
+        resolveReliability(options); // fail at configuration time on invalid values
+        this.options = { ...this.options, reliability: { ...(this.options.reliability ?? {}), ...definedEntries(options) } };
     }
 
     public Host(host: string, vhost: string, h: (h: IRabbitmqHostSettings) => void): any {

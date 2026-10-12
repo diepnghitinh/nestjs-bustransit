@@ -1,622 +1,106 @@
-import * as amqp from 'amqplib';
+import { Injectable, Logger } from '@nestjs/common';
+import type { Channel } from 'amqplib';
+import * as os from 'os';
 import { v7 as uuidv7 } from 'uuid';
 import { IBusTransitBrokerOptions } from '../../interfaces/brokers/bustransit-broker.options.interface';
-import { BusTransitBrokerBaseFactory } from './bustransit-broker.base';
-import { Inject, Injectable, Logger, ParamData } from '@nestjs/common';
-import { ConsumerConfigurator } from '../consumer.configurator';
-import {
-    catchError,
-    defer,
-    delay,
-    delayWhen,
-    every,
-    finalize,
-    interval,
-    last,
-    lastValueFrom,
-    map,
-    mergeMap,
-    Observable,
-    of,
-    retry,
-    retryWhen,
-    Subject,
-    switchMap,
-    take,
-    takeUntil,
-    tap,
-    throwError,
-    timer,
-} from 'rxjs';
-import * as os from 'os';
-import { BusTransitStateMachine } from '../saga.bustransit.state-machine';
-import { BusTransitConsumer } from '../consumer';
-import { ConsumeMessage } from 'amqplib';
-import { addMilliseconds } from '../../utils/date';
-import { retryWithDelay } from '../retry.utils';
-import { EndpointRegistrationConfigurator } from '../endpoint.registration.configurator';
-import { BehaviorContext } from '../behavior.context';
-import { SagaStateMachineInstance } from '../saga.state-machine-instance';
+import { BusTransitHealth } from '../../interfaces/brokers/bustransit-health.interface';
 import { IMessage } from '../../interfaces/message.interface';
-import { IPublishEndpoint } from '../../interfaces';
+import { addMilliseconds } from '../../utils/date';
+import { BehaviorContext } from '../behavior.context';
+import { ConsumerConfigurator } from '../consumer.configurator';
+import { BusTransitBrokerBaseFactory } from './bustransit-broker.base';
+import { buildConnectOptions } from './rabbitmq/connection-options';
+import { ConnectionManager } from './rabbitmq/connection-manager';
+import { ConsumerRunner } from './rabbitmq/consumer-runner';
+import { probeDelayedMessagePlugin } from './rabbitmq/delayed-plugin-probe';
+import { createDeliveryHandler } from './rabbitmq/delivery-pipeline';
+import { isNotFound } from './rabbitmq/errors';
+import { Publisher } from './rabbitmq/publisher';
+import { ReliabilityOptions, resolveReliability } from './rabbitmq/reliability-options';
+import { REPLY_QUEUE, RequestClient } from './rabbitmq/request-client';
+import { TopologyRefreshSession } from './rabbitmq/topology-refresh';
+import { withTimeout } from '../../utils/deferred';
+import { buildTopology, declareTopology, ExchangeDeclaration } from './rabbitmq/topology';
 
 @Injectable()
 export class BusTransitBrokerRabbitMqFactory extends BusTransitBrokerBaseFactory {
     brokerName = 'RabbitMq';
     brokerConfig: IBusTransitBrokerOptions;
     private channelProducer = '_producer';
+    private reliability: ReliabilityOptions = resolveReliability();
+    private manager: ConnectionManager | null = null;
+    private publisher: Publisher | null = null;
+    private requests: RequestClient | null = null;
+    private readonly runners = new Map<string, ConsumerRunner>();
+    private delayedMessagePluginSupported = false;
+    private queueRedeliveryEnabled = new Map<string, boolean>();
+    /** Set when stopConsuming() starts: a message that fails from then on goes back to its queue instead of being parked. */
+    private consumersStopping = false;
+    /** Aborts a delayed-plugin probe in progress, so shutdown does not wait for it. */
+    private probeAbort: AbortController | null = null;
+    private declarations: ExchangeDeclaration[] = [];
+    private topologyTimer: NodeJS.Timeout | null = null;
+    private refreshingTopology = false;
+    /** The refresh in progress, so stopConsuming() can end it. */
+    private refreshSession: TopologyRefreshSession | null = null;
 
-    private connection: amqp.ChannelModel;
-    private channelList: Map<string, amqp.Channel> = new Map<string, amqp.Channel>();
-    private reconnectDelay = 5000;
-    private isConnecting = false;
-    private delayedMessagePluginSupported: boolean = false;
-    private queueRedeliveryEnabled: Map<string, boolean> = new Map<string, boolean>();
-
-    public async start() {
-        if (this.isConnecting) return;
-        this.isConnecting = true;
-
-        const brokerInfo = this.brokerConfig.brokerInfo;
-
-        const connectString = `amqp://${brokerInfo['username']}:${brokerInfo['password']}@${brokerInfo['host']}:${brokerInfo['port']}${brokerInfo['vhost']}`;
-        try {
-            this.connection = await amqp.connect(connectString, {
-                clientProperties: { connection_name: this.brokerConfig.brokerName },
-            });
-
-            await this.createChannel(this.channelProducer, {});
-            await this.checkDelayedMessagePlugin();
-            const exchangeCreated = await this.startAllConsumer();
-
-            this.connection.on('close', () => {
-                console.warn('[RabbitMQ] Connection closed, retrying...');
-                setTimeout(() => this.start(), this.reconnectDelay);
-            });
-        } catch (e) {
-            console.error('[RabbitMQ] Connection failed, retrying in 5s', e);
-            setTimeout(() => this.start(), this.reconnectDelay);
-        } finally {
-            this.isConnecting = false;
-        }
+    public setBrokerConfig(brokerConfig: IBusTransitBrokerOptions) {
+        this.brokerConfig = brokerConfig;
+        this.reliability = resolveReliability(brokerConfig.reliability);
+        // Built here, not in start(), so a publish made before bootstrap waits for the connection
+        // (up to readyTimeoutMs) instead of failing.
+        this.manager = new ConnectionManager(
+            buildConnectOptions(brokerConfig.brokerInfo),
+            brokerConfig.brokerName,
+            this.reliability,
+            () => this.onConnected(),
+        );
+        this.manager.onDisconnected(() => this.clearTopologyRefresh());
+        this.publisher = new Publisher(this.manager, this.reliability);
+        this.requests = new RequestClient(this.manager, this.reliability);
     }
 
-    private getProducerChannel(): amqp.Channel {
-        return this.channelList[this.channelProducer];
+    public async start(): Promise<void> {
+        await this.requireManager().start();
     }
 
-    /**
-     * Get the status of x-delayed-message plugin support
-     */
+    /** Stops taking messages and waits for those in progress. Final: no consumer starts after it. Publishing keeps working until close(). */
+    public async stopConsuming(): Promise<void> {
+        if (!this.manager) return;
+        this.consumersStopping = true;
+        this.clearTopologyRefresh();
+        this.probeAbort?.abort();
+        // A refresh blocked on a frozen broker must not log a failure for every remaining declaration once the socket drops.
+        void this.refreshSession?.end();
+        // ConsumerRunner.stop() is idempotent, so close() after stopConsuming() does not wait for the drain again.
+        await Promise.all([...this.runners.values()].map((runner) => runner.stop(this.reliability.shutdownTimeoutMs)));
+    }
+
+    public async close(): Promise<void> {
+        if (!this.manager) return;
+        await this.stopConsuming();
+        await this.manager.close();
+    }
+
+    public health(): BusTransitHealth {
+        return {
+            connected: this.manager?.isConnected ?? false,
+            blocked: this.manager?.isBlocked ?? false,
+            consumers: Object.fromEntries([...this.runners].map(([queue, runner]) => [queue, runner.status])),
+        };
+    }
+
     public isDelayedMessagePluginSupported(): boolean {
         return this.delayedMessagePluginSupported;
     }
 
-    /**
-     * Check if redelivery is enabled for a specific queue
-     * Redelivery requires both configuration AND x-delayed-message plugin support
-     */
     public isRedeliveryEnabledForQueue(queueName: string): boolean {
         return this.queueRedeliveryEnabled.get(queueName) ?? false;
     }
 
-    /**
-     * Check if RabbitMQ x-delayed-message plugin is installed
-     * Uses a temporary channel to avoid affecting the main producer channel
-     */
-    private async checkDelayedMessagePlugin(): Promise<void> {
-        let testChannel: amqp.Channel | null = null;
-        const testExchangeName = '_test_delayed_exchange_' + Date.now();
-
-        try {
-            // Create a temporary channel for testing to avoid affecting the main producer channel
-            testChannel = await this.connection.createChannel();
-
-            // Suppress channel errors during the test
-            testChannel.on('error', (err) => {
-                // Expected error when plugin is not available
-                Logger.debug(`[RabbitMQ] Test channel error (expected if plugin not installed): ${err.message}`);
-            });
-
-            // Try to create a delayed exchange to test plugin availability
-            await testChannel.assertExchange(testExchangeName, 'x-delayed-message', {
-                autoDelete: true,
-                durable: false,
-                arguments: { 'x-delayed-type': 'direct' }
-            });
-
-            // If successful, delete the test exchange
-            await testChannel.deleteExchange(testExchangeName);
-
-            this.delayedMessagePluginSupported = true;
-            Logger.log('[RabbitMQ] ✓ x-delayed-message plugin is available');
-        } catch (error) {
-            this.delayedMessagePluginSupported = false;
-            Logger.warn(
-                '[RabbitMQ] ⚠ WARNING: x-delayed-message plugin is NOT installed or not enabled. ' +
-                'Delayed/scheduled message features will not work. ' +
-                'Please install the plugin: https://github.com/rabbitmq/rabbitmq-delayed-message-exchange'
-            );
-            Logger.debug(`[RabbitMQ] Plugin check error: ${error.message}`);
-        } finally {
-            // Always close the test channel
-            if (testChannel) {
-                try {
-                    await testChannel.close();
-                } catch (closeError) {
-                    // Channel might already be closed by RabbitMQ
-                    Logger.debug(`[RabbitMQ] Test channel close: ${closeError.message}`);
-                }
-            }
-        }
-    }
-
-    public setBrokerConfig(brokerConfig: IBusTransitBrokerOptions) {
-        this.brokerConfig = brokerConfig;
-    }
-
-    async createAllExchange(exchangeCreatedFromConsumers) {
-        Logger.debug(`Created All Exchange`);
-        const exchanges = [];
-
-
-
-        console.log('classMessageToEndpoint: ');
-        console.log(this.classMessageToEndpoint);
-
-        for (const [key, consumerClass] of Object.entries(this.consumers)) {
-            // Extract actual class if it's a saga consumer data object
-            const consumerData = consumerClass as any;
-            const consumer = consumerData?.machineClass || consumerData;
-
-            const bus = this.moduleRef.get(consumer) as BusTransitConsumer<any>;
-            // IF had .Endpoint()
-            if (consumer.EndpointRegistrationConfigurator) {
-                this.classMessageToEndpoint[bus.GetMessageClass.name] =
-                    consumer.EndpointRegistrationConfigurator;
-            }
-
-            // If consumer is Saga
-            if (Object.getPrototypeOf(consumer) === BusTransitStateMachine) {
-                const _busSaga = bus as BusTransitStateMachine<any>;
-
-                //console.log('exchange saga: ' + _busSaga.GetMessageClass.name + ' <- ' + consumer.EndpointRegistrationConfigurator.Name);
-                exchanges.push({
-                    exchangeName: _busSaga.GetMessageClass.name,
-                    bindTo: null,
-                });
-
-                for (const [event, value] of Object.entries(_busSaga.GetEvents)) {
-                    const getExchange = event;
-
-                    if (!this.classMessageToEndpoint[event]) {
-                        this.classMessageToEndpoint[event] = new EndpointRegistrationConfigurator();
-                        this.classMessageToEndpoint[event].Name = this.classMessageToExchange[_busSaga.GetMessageClass.name];
-                    }
-
-                    await this.assertExchange(
-                        this.channelList[this.channelProducer],
-                        getExchange,
-                        'fanout',
-                    );
-                    //console.log('exchange GetEvents: ' + getExchange + ' <- ' + consumer.EndpointRegistrationConfigurator.Name);
-                    exchanges.push({
-                        exchangeName: getExchange,
-                        bindTo: this.classMessageToEndpoint[event].Name,
-                    });
-                }
-
-                for (const [stateKey, value] of Object.entries(_busSaga.GetBehaviours)) {
-                    const getExchange = stateKey;
-                    // console.log('exchange GetBehaviours: ' + getExchange);
-                    exchanges.push({
-                        exchangeName: getExchange,
-                        bindTo: null,
-                    });
-                }
-
-                continue;
-            }
-        }
-
-        // AddConsumer
-        for (const exchange of exchanges) {
-            await this.assertExchange(
-                this.channelList[this.channelProducer],
-                exchange.exchangeName,
-                'fanout',
-            );
-            if (exchange.bindTo) {
-                await this.assertExchange(
-                    this.channelList[this.channelProducer],
-                    exchange.bindTo,
-                    'fanout',
-                );
-                await this.channelList[this.channelProducer].bindExchange(
-                    this.getNameAddClusterPrefix(exchange.bindTo),
-                    this.getNameAddClusterPrefix(exchange.exchangeName),
-                    '',
-                );
-            }
-        }
-
-        // ReceiveEndpoint => ConfigureConsumer
-        for (const exchange of exchangeCreatedFromConsumers) {
-            await this.assertExchange(
-                this.channelList[this.channelProducer],
-                exchange.exchangeName,
-                'fanout',
-            );
-            if (exchange.bindTo) {
-                await this.assertExchange(
-                    this.channelList[this.channelProducer],
-                    exchange.bindTo,
-                    'fanout',
-                );
-                await this.channelList[this.channelProducer].bindExchange(
-                    this.getNameAddClusterPrefix(exchange.bindTo),
-                    this.getNameAddClusterPrefix(exchange.exchangeName),
-                    '',
-                );
-            }
-        }
-    }
-
-    public async startAllConsumer() {
-        Logger.debug('begin startAllConsumer');
-
-        /* Map<String, String> { endpoint : consumer } */
-        const exchangeCreated = [];
-
-        // Các consumer bao gồm cả sagas và consumers
-        for (const [queueName, consumerCfg] of Object.entries(this.consumersToEndpoint)) {
-            const consumer = (consumerCfg as ConsumerConfigurator).consumer;
-            const consumerState = (this.moduleRef.get(consumer) as BusTransitConsumer<any>)
-                .GetMessageClass;
-            exchangeCreated.push({
-                exchangeName: consumerState?.name,
-                bindTo: queueName,
-            });
-            // Mapping queue to Message
-            this.classConsumerToEndpoint[consumer?.name] = queueName;
-            this.classMessageToExchange[consumerState?.name] = queueName;
-        }
-
-        super.startAllConsumer();
-        await this.createAllExchange(exchangeCreated);
-
-        for (const [queueName, consumerCfg] of Object.entries(this.consumersToEndpoint)) {
-            const consumer = (consumerCfg as ConsumerConfigurator).consumer;
-            const options = (consumerCfg as ConsumerConfigurator).options;
-            const retryPattern = (consumerCfg as ConsumerConfigurator).retryPattern;
-            const redeliveryPattern = (consumerCfg as ConsumerConfigurator).redeliveryPattern;
-
-            Logger.debug(`Started Consumer ${consumer?.name} <- ${queueName}`);
-
-            await this.createChannel(queueName, options);
-            await this.bindConsumerToQueue(
-                {
-                    consumer: consumer,
-                    retryPattern: retryPattern,
-                    redeliveryPattern: redeliveryPattern,
-                },
-                queueName,
-                queueName,
-            );
-        }
-
-        return exchangeCreated;
-    }
-
-    protected async createChannel(queueName: string, options) {
-        const channel = await this.connection.createChannel();
-        await channel.prefetch(options.PrefetchCount);
-
-        // Add error handler to prevent uncaught channel errors
-        channel.on('error', (err) => {
-            Logger.error(`[RabbitMQ] Channel error for '${queueName}': ${err.message}`);
-        });
-
-        channel.on('close', () => {
-            Logger.warn(`[RabbitMQ] Channel closed for '${queueName}'`);
-        });
-
-        this.channelList[queueName] = channel;
-    }
-
-    protected async bindConsumerToQueue(
-        bindConsume: { consumer: Function; retryPattern: any; redeliveryPattern: any },
-        queueName: string,
-        exchange?: string,
-    ) {
-        await this.checkQueueAndAssert(
-            queueName,
-            async () => {
-                const channel = this.channelList[queueName];
-                // Check if redelivery can be enabled (requires both configuration AND plugin support)
-                const delayExchange = `delayed.exchange.${queueName}`;
-                const canEnableRedelivery = bindConsume.redeliveryPattern && this.delayedMessagePluginSupported;
-
-                if (bindConsume.redeliveryPattern) {
-                    if (!this.delayedMessagePluginSupported) {
-                        // Redelivery requested but plugin not available
-                        this.queueRedeliveryEnabled.set(queueName, false);
-                        Logger.warn(
-                            `[RabbitMQ] Redelivery pattern configured for queue '${queueName}' but x-delayed-message plugin is NOT available. ` +
-                            `Redelivery is DISABLED. Install plugin: https://github.com/rabbitmq/rabbitmq-delayed-message-exchange`
-                        );
-                    } else {
-                        // Redelivery enabled: create delayed exchange
-                        try {
-                            await this.assertExchange(channel, delayExchange, 'x-delayed-message', {
-                                autoDelete: false,
-                                durable: true,
-                                arguments: { 'x-delayed-type': 'direct' },
-                            });
-                            await channel.bindQueue(queueName, this.getNameAddClusterPrefix(delayExchange), '');
-
-                            this.queueRedeliveryEnabled.set(queueName, true);
-                            Logger.log(`[RabbitMQ] ✓ Redelivery enabled for queue '${queueName}'`);
-                        } catch (error) {
-                            // Failed to create delayed exchange even though plugin check passed
-                            this.queueRedeliveryEnabled.set(queueName, false);
-                            this.delayedMessagePluginSupported = false; // Update global flag
-
-                            Logger.error(
-                                `[RabbitMQ] ✗ Failed to create delayed exchange for queue '${queueName}'. ` +
-                                `Error: ${error.message}. Redelivery is DISABLED.`
-                            );
-                            Logger.warn(
-                                `[RabbitMQ] This may indicate the x-delayed-message plugin became unavailable ` +
-                                `or there are permission issues. All queues will have redelivery disabled.`
-                            );
-                        }
-                    }
-                } else {
-                    // No redelivery configured
-                    this.queueRedeliveryEnabled.set(queueName, false);
-                }
-
-                channel
-                    .consume(
-                        queueName,
-                        (message) => {
-                            const jsonMsg = JSON.parse(message.content.toString());
-                            const secs = message.content.toString().split('.').length - 1;
-
-                            const consumerFunc = async (_message, _jsonMsg) => {
-                                const consumerInstance = this.moduleRef.get(bindConsume.consumer);
-                                consumerInstance.producer = this.moduleRef.get(IPublishEndpoint);
-
-                                const ctx = new BehaviorContext<SagaStateMachineInstance, any>();
-                                ctx.Saga = _jsonMsg.headers?.saga;
-
-                                const rs = await consumerInstance.Consume(ctx, {
-                                    ..._message,
-                                    Message: _jsonMsg.message,
-                                } as IMessage<any>);
-
-                                if (
-                                    _message.properties.replyTo &&
-                                    _message.properties.correlationId
-                                ) {
-                                    // Reply if had
-                                    channel.publish(
-                                        '',
-                                        _message.properties.replyTo,
-                                        Buffer.from(JSON.stringify(rs ?? true)),
-                                        {
-                                            // Empty exchange
-                                            correlationId: _message.properties.correlationId,
-                                        },
-                                    );
-                                    // Logger.log(`[x] Reply to ${message.properties.replyTo}, correlationId ${message.properties.correlationId}`);
-                                }
-
-                                setTimeout(function () {
-                                    channel.ack(_message);
-                                }, secs * 1000);
-                            };
-
-                            const retryPattern = bindConsume.retryPattern ?? {
-                                pipe: retryWithDelay({ maxRetryAttempts: 0, delay: 0 }),
-                            };
-                            const redeliveryPattern = bindConsume.redeliveryPattern ?? {
-                                pipe: retryWithDelay({ maxRetryAttempts: 0, delay: 0 }),
-                            };
-                            const start = performance.now();
-
-                            of(null)
-                                .pipe(
-                                    mergeMap(() => {
-                                        return consumerFunc(message, jsonMsg);
-                                    }),
-                                    retryPattern.pipe,
-                                )
-                                .subscribe({
-                                    next: (data) => { },
-                                    error: async (err) => {
-                                        console.log(err);
-                                        Logger.error('RabbitMQ Message error', err.message);
-
-                                        const queueDeclared = `${queueName}`;
-
-                                        // Redelivery pattern - only if enabled for this queue (requires plugin support)
-                                        const isRedeliveryEnabled = this.queueRedeliveryEnabled.get(queueName) ?? false;
-
-                                        if (redeliveryPattern && redeliveryPattern.retryValue && isRedeliveryEnabled) {
-                                            const indexRedelivery = message.properties.headers?.['x-redelivery'] ?? 0;
-
-                                            // Determine delay based on retry type
-                                            let delayMs = 0;
-                                            let maxRetries = 0;
-
-                                            switch (redeliveryPattern.retryType) {
-                                                case 0: // Retry.Immediate
-                                                    maxRetries = redeliveryPattern.retryValue;
-                                                    delayMs = 0;
-                                                    break;
-                                                case 1: // Retry.Interval
-                                                    maxRetries = redeliveryPattern.retryValue[0];
-                                                    delayMs = redeliveryPattern.retryValue[1];
-                                                    break;
-                                                case 2: // Retry.Intervals
-                                                    maxRetries = redeliveryPattern.retryValue.length;
-                                                    delayMs = indexRedelivery < redeliveryPattern.retryValue.length
-                                                        ? redeliveryPattern.retryValue[indexRedelivery]
-                                                        : 0;
-                                                    break;
-                                                case 3: // Retry.Exponential
-                                                    maxRetries = redeliveryPattern.retryValue[0];
-                                                    const initialDelay = redeliveryPattern.retryValue[1];
-                                                    const scalingFactor = redeliveryPattern.retryValue[2];
-                                                    delayMs = initialDelay * Math.pow(scalingFactor, indexRedelivery);
-                                                    break;
-                                            }
-
-                                            if (indexRedelivery < maxRetries) {
-                                                Logger.log(`[RabbitMQ] Redelivery: Attempt ${indexRedelivery + 1}/${maxRetries}: retrying in ${delayMs}ms`);
-
-                                                try {
-                                                    this.channelList[queueName].publish(
-                                                        this.getNameAddClusterPrefix(delayExchange),
-                                                        '',
-                                                        Buffer.from(JSON.stringify(jsonMsg), "utf-8"),
-                                                        {
-                                                            headers: {
-                                                                ...message.properties.headers,
-                                                                "x-delay": delayMs,
-                                                                "x-redelivery": Number(indexRedelivery) + 1,
-                                                            }
-                                                        }
-                                                    );
-
-                                                    channel.ack(message);
-                                                    return;
-                                                } catch (redeliveryErr) {
-                                                    Logger.error('Failed to publish redelivery message', redeliveryErr.message);
-                                                }
-                                            } else {
-                                                Logger.warn(`[RabbitMQ] Redelivery: Max attempts (${maxRetries}) reached for message`);
-                                            }
-                                        } else if (redeliveryPattern && redeliveryPattern.retryValue && !isRedeliveryEnabled) {
-                                            // Redelivery configured but not enabled (plugin not available)
-                                            Logger.warn(
-                                                `[RabbitMQ] Redelivery pattern configured but DISABLED for queue '${queueName}' - ` +
-                                                `x-delayed-message plugin not available. Message will be sent to error queue.`
-                                            );
-                                        }
-
-                                        // Move to Error queue
-                                        await this.checkQueueAndAssert(
-                                            queueDeclared,
-                                            () => {
-                                                const errorPayload = {
-                                                    headers: message.properties.headers,
-                                                    message: jsonMsg,
-                                                    host: this.getSystemInfo(),
-                                                    error: {
-                                                        stack: err.stack,
-                                                        message: err.message,
-                                                        timestamp: new Date().toISOString(),
-                                                    },
-                                                    retryHistory: {
-                                                        immediateRetries: message.properties.headers?.['x-retry-count'] ?? 0,
-                                                        redeliveryAttempts: message.properties.headers?.['x-redelivery'] ?? 0,
-                                                    }
-                                                };
-
-                                                this.channelList[queueName].sendToQueue(
-                                                    `${queueDeclared}_error`,
-                                                    Buffer.from(JSON.stringify(errorPayload), 'utf-8'),
-                                                );
-
-                                                Logger.error(
-                                                    `Message moved to error queue: ${queueDeclared}_error. ` +
-                                                    `Immediate retries: ${errorPayload.retryHistory.immediateRetries}, ` +
-                                                    `Redelivery attempts: ${errorPayload.retryHistory.redeliveryAttempts}`
-                                                );
-                                            },
-                                            {
-                                                suffix: '_error',
-                                            },
-                                        );
-
-                                        setTimeout(function () {
-                                            channel.ack(message);
-                                        }, secs * 1000);
-                                    },
-                                    complete: () => {
-                                        // Logger.log(`Completed consumer message ${bindConsume.consumer.name}, time: ${performance.now() - start}ms`)
-                                    },
-                                });
-                        },
-                        {
-                            noAck: false,
-                        },
-                    )
-                    .then((r) => { });
-            },
-            {
-                exchange: {
-                    name: exchange,
-                    type: 'fanout',
-                },
-            },
-        );
-    }
-
-    private async checkQueueAndAssert(
-        queueName: string,
-        callback,
-        options?: { exchange?: { name: string; type: string }; suffix?: string },
-    ) {
-        this.channelList[queueName]
-            .assertQueue(`${queueName}${options?.suffix ?? ''}`, {
-                durable: true,
-            })
-            .then(async () => {
-                if (options.exchange) {
-                    await this.channelList[queueName].bindQueue(
-                        queueName,
-                        this.getNameAddClusterPrefix(options.exchange?.name),
-                        '',
-                    );
-                }
-                callback();
-            });
-    }
-
-    private async assertExchange(channel, exchangeName: string, type: string, options: any = {}) {
-        // Using cluster name if it had
-        const _exchangeName = this.getNameAddClusterPrefix(exchangeName);
-        await channel.assertExchange(_exchangeName, type, {
-            durable: true,
-            ...options,
-        });
-        return _exchangeName;
-    }
-
-    private getSystemInfo() {
-        return {
-            machineName: os.hostname(),
-            processName: process.title,
-            processId: process.pid, // Thay thế bằng version assembly thực tế của bạn (nếu có)
-            frameworkVersion: process.version, // Thay thế bằng version MassTransit thực tế của bạn (nếu có)
-            operatingSystemVersion: `${os.type()} ${os.release()}`,
-        };
-    }
-
-    public close() { }
-
-    protected getNameAddClusterPrefix(name) {
-        const _name = `${this.brokerConfig.brokerName ? `${this.brokerConfig.brokerName}:` : ''}${name}`;
-        return _name;
-    }
-
     // Message functions
-    async publish<TMessage>(message: TMessage, ctx?: BehaviorContext<any, TMessage>) {
-        // Trường hợp Message không có exchange trong process thì push thẳng vào tên exchange ??
+    async publish<TMessage>(message: TMessage, ctx?: BehaviorContext<any, TMessage>): Promise<void> {
+        await this.requireManager().whenReady();
         const exchange = this.getNameAddClusterPrefix(
             this.classMessageToExchange[message.constructor.name] ??
             this.classMessageToEndpoint[message.constructor.name]?.Name ??
@@ -625,7 +109,7 @@ export class BusTransitBrokerRabbitMqFactory extends BusTransitBrokerBaseFactory
         const msg = {
             messageId: uuidv7(),
             type: 'publish',
-            sourceAddress: `rabbitmq://${this.brokerConfig.brokerInfo.host}/${this.channelProducer}`, // TODO
+            sourceAddress: `rabbitmq://${this.brokerConfig.brokerInfo.host}/${this.channelProducer}`,
             destinationAddress: `rabbitmq://${this.brokerConfig.brokerInfo.host}/exchange/${exchange}`,
             messageType: `message:${this.brokerConfig.brokerName}:${message.constructor.name}`,
             message: message,
@@ -635,90 +119,280 @@ export class BusTransitBrokerRabbitMqFactory extends BusTransitBrokerBaseFactory
                 saga: ctx?.Saga,
             },
         } as IMessage<any>;
-        (await this.getProducerChannel()).publish(
-            exchange,
-            '',
-            Buffer.from(JSON.stringify(msg), 'utf-8'),
-            {
-                persistent: true,
+        await this.requirePublisher().publishToExchange(exchange, msg, { messageId: msg.messageId });
+    }
+
+    async publishAsync<TMessage>(message: TMessage, ctx?: BehaviorContext<any, TMessage>): Promise<any> {
+        await this.requireManager().whenReady();
+        const classMessage = this.classMessageToEndpoint[message.constructor.name];
+        const endpoint = classMessage?.EndpointRegistrationConfigurator?.Name ?? classMessage?.Name ?? message.constructor.name;
+        const msg = {
+            messageId: uuidv7(),
+            type: 'publishAsync',
+            sourceAddress: `rabbitmq://${this.brokerConfig.brokerInfo.host}/${REPLY_QUEUE}`,
+            destinationAddress: `rabbitmq://${this.brokerConfig.brokerInfo.host}/queue/${endpoint ?? ''}`,
+            messageType: `message:${this.brokerConfig.brokerName}:${message.constructor.name}`,
+            message: message,
+            sentTime: new Date().toString(),
+            expirationTime: addMilliseconds(new Date(), this.reliability.sendTimeoutMs).toString(),
+            headers: {
+                saga: ctx?.Saga,
             },
+        } as IMessage<any>;
+        Logger.debug(`[x] Sent msg to ${endpoint}, replyTo ${REPLY_QUEUE}`);
+        if (!this.requests) throw new Error('[RabbitMQ] Broker is not configured');
+        return this.requests.send(endpoint, msg, message.constructor.name);
+    }
+
+    private async onConnected(): Promise<void> {
+        const publisher = this.requirePublisher();
+        await publisher.open();
+
+        // Fills the routing maps publish()/publishAsync() read, so it runs even when shutdown has begun:
+        // publishing keeps working until close(). Only the declaring, the consumers and the refresh are skipped then.
+        const declarations = buildTopology(this.consumers, this.consumersToEndpoint, (token) => this.moduleRef.get(token as any), {
+            classConsumerToEndpoint: this.classConsumerToEndpoint,
+            classMessageToEndpoint: this.classMessageToEndpoint,
+            classMessageToExchange: this.classMessageToExchange,
+        });
+        this.declarations = declarations;
+
+        // Shutdown began before the probe: skip it rather than start a connection to abort.
+        if (this.consumersStopping) return;
+        const probe = new AbortController();
+        this.probeAbort = probe;
+        let supported: boolean;
+        try {
+            supported = await probeDelayedMessagePlugin(
+                buildConnectOptions(this.brokerConfig.brokerInfo),
+                this.brokerConfig.brokerName,
+                this.reliability.readyTimeoutMs,
+                probe.signal,
+            );
+        } finally {
+            if (this.probeAbort === probe) this.probeAbort = null;
+        }
+        // Shutdown began during the probe: its answer (false when aborted) says nothing about the broker, and no
+        // consumer will start, so declare nothing. Publishing still declares what it needs lazily.
+        if (this.consumersStopping) return;
+        this.delayedMessagePluginSupported = supported;
+        if (this.delayedMessagePluginSupported) {
+            Logger.log('[RabbitMQ] ✓ x-delayed-message plugin is available');
+        } else {
+            Logger.warn(
+                '[RabbitMQ] ⚠ WARNING: x-delayed-message plugin is NOT installed or not enabled. ' +
+                'Delayed redelivery will not work. ' +
+                'Please install the plugin: https://github.com/rabbitmq/rabbitmq-delayed-message-exchange',
+            );
+        }
+
+        await declareTopology(publisher, declarations, (name) => this.getNameAddClusterPrefix(name));
+
+        // Shutdown began while this setup was running (e.g. SIGTERM before the first connection was ready):
+        // start no consumer. Checked right before the runners are created, with no await in between, so
+        // stopConsuming() either sees every runner or this check sees the flag.
+        if (this.consumersStopping) return;
+        for (const [queueName, cfg] of Object.entries(this.consumersToEndpoint)) {
+            if (!this.runners.has(queueName)) {
+                this.runners.set(queueName, this.createRunner(queueName, cfg as ConsumerConfigurator));
+            }
+        }
+        // Each runner handles its own failures; one bad queue never fails the connection setup.
+        await Promise.all([...this.runners.values()].map((runner) => runner.start()));
+        this.scheduleTopologyRefresh();
+    }
+
+    private scheduleTopologyRefresh(): void {
+        this.clearTopologyRefresh();
+        // `current`, not `isConnected`: the manager reports connected only after this setup returns.
+        if (this.consumersStopping || !this.manager?.current) return;
+        this.topologyTimer = setTimeout(() => {
+            this.topologyTimer = null;
+            void this.refreshTopology().finally(() => this.scheduleTopologyRefresh());
+        }, this.reliability.topologyRefreshMs);
+        this.topologyTimer.unref();
+    }
+
+    private clearTopologyRefresh(): void {
+        if (this.topologyTimer) clearTimeout(this.topologyTimer);
+        this.topologyTimer = null;
+    }
+
+    /**
+     * Declares every exchange and binding of this process again: an operator may have deleted some since.
+     * Runs on throwaway channels and leaves the publisher's caches alone, so it cannot disturb anything
+     * else. An existing exchange is used as it is; only a missing one is created. One refresh at a time,
+     * bounded by readyTimeoutMs; a refresh that times out is abandoned and the next tick tries again.
+     */
+    private async refreshTopology(): Promise<void> {
+        if (this.refreshingTopology || this.consumersStopping || !this.manager?.isConnected) return;
+        this.refreshingTopology = true;
+        let session: TopologyRefreshSession;
+        try {
+            session = this.requirePublisher().createRefreshSession();
+        } catch (err) {
+            this.refreshingTopology = false;
+            Logger.warn(`[RabbitMQ] Topology refresh failed: ${err.message}`);
+            return;
+        }
+        this.refreshSession = session;
+        const work = this.declareAgain(session).finally(() => {
+            this.refreshingTopology = false;
+        });
+        const budget = this.reliability.readyTimeoutMs;
+        try {
+            await withTimeout(work, budget, `[RabbitMQ] Topology refresh did not finish within ${budget}ms`);
+        } catch (err) {
+            Logger.warn(`[RabbitMQ] Topology refresh failed: ${err.message}`);
+        } finally {
+            await session.end();
+            if (this.refreshSession === session) this.refreshSession = null;
+        }
+    }
+
+    private async declareAgain(session: TopologyRefreshSession): Promise<void> {
+        const prefix = (name: string) => this.getNameAddClusterPrefix(name);
+        const fanout = (name: string) => (channel: Channel) => channel.assertExchange(name, 'fanout', { durable: true });
+        const seen = new Set<string>();
+        for (const { exchange, bindTo } of this.declarations) {
+            if (!exchange) continue;
+            const key = `${exchange}->${bindTo ?? ''}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            await session.attempt(`exchange '${prefix(exchange)}'${bindTo ? ` -> '${prefix(bindTo)}'` : ''}`, async () => {
+                await session.exchangeIfMissing(prefix(exchange), fanout(prefix(exchange)));
+                if (bindTo) {
+                    await session.exchangeIfMissing(prefix(bindTo), fanout(prefix(bindTo)));
+                    await session.bindExchange(prefix(bindTo), prefix(exchange));
+                }
+            });
+        }
+        for (const queueName of this.runners.keys()) {
+            const queueExchange = prefix(queueName);
+            await session.attempt(`queue '${queueName}'`, async () => {
+                await session.exchangeIfMissing(queueExchange, fanout(queueExchange));
+                await session.bindQueue(queueName, queueExchange);
+            });
+            if (!this.queueRedeliveryEnabled.get(queueName)) continue;
+            const delayExchange = prefix(`delayed.exchange.${queueName}`);
+            await session.attempt(`delay exchange of queue '${queueName}'`, async () => {
+                await session.exchangeIfMissing(delayExchange, (channel) =>
+                    channel.assertExchange(delayExchange, 'x-delayed-message', {
+                        autoDelete: false,
+                        durable: true,
+                        arguments: { 'x-delayed-type': 'direct' },
+                    }),
+                );
+                await session.bindQueue(queueName, delayExchange);
+            });
+        }
+    }
+
+    private createRunner(queueName: string, cfg: ConsumerConfigurator): ConsumerRunner {
+        const options = (cfg.options ?? {}) as { PrefetchCount?: number };
+        const queueExchange = this.getNameAddClusterPrefix(queueName);
+        const delayExchange = this.getNameAddClusterPrefix(`delayed.exchange.${queueName}`);
+        const publisher = this.requirePublisher();
+        return new ConsumerRunner(
+            {
+                queue: queueName,
+                prefetch: options.PrefetchCount ?? 50,
+                prepare: async (channel) => {
+                    await publisher.ensureExchange(queueExchange);
+                    await channel.assertQueue(queueName, { durable: true });
+                    try {
+                        await channel.bindQueue(queueName, queueExchange, '');
+                    } catch (err) {
+                        // The exchange was deleted behind the declaration cache: declare it again on the next start.
+                        if (isNotFound(err)) publisher.forgetExchange(queueExchange);
+                        throw err;
+                    }
+                    await this.setupRedelivery(queueName, cfg.redeliveryPattern, delayExchange);
+                },
+                handle: createDeliveryHandler({
+                    queue: queueName,
+                    consumer: cfg.consumer,
+                    retryPattern: cfg.retryPattern,
+                    redeliveryPattern: cfg.redeliveryPattern,
+                    redeliveryEnabled: () => this.queueRedeliveryEnabled.get(queueName) ?? false,
+                    delayExchange,
+                    resolve: (token) => this.moduleRef.get(token as any),
+                    publisher,
+                    hostInfo: () => this.getSystemInfo(),
+                    requeueDelayMs: this.reliability.reconnectDelayMs,
+                    stopping: () => this.consumersStopping,
+                }),
+            },
+            this.requireManager(),
+            this.reliability,
         );
     }
 
-    /* Bản chất rabbitmq không thể async khi publish được, sử dụng sendQueue instead */
-    async publishAsync<TMessage>(
-        message: TMessage,
-        ctx?: BehaviorContext<any, TMessage>,
-    ): Promise<any> {
-        const classMessage = this.classMessageToEndpoint[message.constructor.name];
-        const endpoint = classMessage?.EndpointRegistrationConfigurator?.Name ?? classMessage?.Name ?? message.constructor.name;
-        const correlationId = uuidv7();
-        const replyQueueName = 'amq.rabbitmq.reply-to';
-        const timeout = 10000;
-
-        const channelTemp = await this.connection.createChannel();
-
-        return new Promise(async (resolve, reject) => {
-            // Create a temporary consumer to receive feedback
-            const consumeResult = await channelTemp.consume(
-                replyQueueName,
-                (replyMessage: ConsumeMessage | null) => {
-                    if (replyMessage && replyMessage.properties.correlationId === correlationId) {
-                        // Decode and return the response content
-                        try {
-                            const reply = JSON.parse(replyMessage.content.toString());
-                            resolve(reply); // Resolve promise với dữ liệu
-                        } catch (error) {
-                            reject(error); // Reject if there is an error when parsing JSON
-                        } finally {
-                            channelTemp
-                                .cancel(consumeResult.consumerTag)
-                                .catch((e) => console.error('Failed to cancel consumer', e)); // Hủy consumer
-                        }
-                    }
-                },
-                { noAck: true },
+    private async setupRedelivery(queueName: string, redeliveryPattern: unknown, delayExchange: string): Promise<void> {
+        if (!redeliveryPattern) {
+            this.queueRedeliveryEnabled.set(queueName, false);
+            return;
+        }
+        if (!this.delayedMessagePluginSupported) {
+            this.queueRedeliveryEnabled.set(queueName, false);
+            Logger.warn(
+                `[RabbitMQ] Redelivery pattern configured for queue '${queueName}' but x-delayed-message plugin is NOT available. ` +
+                'Redelivery is DISABLED. Install plugin: https://github.com/rabbitmq/rabbitmq-delayed-message-exchange',
             );
-
-            // Timeout để xử lý trường hợp không có phản hồi
-            const timer = setTimeout(() => {
-                reject(new Error(`No response received after ${timeout}ms`));
-                channelTemp.cancel(consumeResult.consumerTag); // Hủy consumer
-            }, timeout);
-
-            // console.log('*** saga');
+            return;
+        }
+        const publisher = this.requirePublisher();
+        // The delay exchange is asserted strictly here (a 406 disables redelivery), while the topology refresh
+        // only re-asserts it when it is missing: an exchange that exists with other arguments (e.g. a delay
+        // exchange that is not 'x-delayed-message' with 'x-delayed-type: direct') cannot do delayed delivery,
+        // so disabling redelivery for the queue is right. The refresh only runs for queues whose redelivery
+        // got enabled here.
+        const declareAndBind = async () => {
+            // Asserted on every consumer start, not from the cache: an operator may have deleted it since.
+            // Bound on the topology channel, so a refused bind never closes the consumer's channel.
+            publisher.forgetExchange(delayExchange);
+            await publisher.declareDelayedExchange(delayExchange);
+            await publisher.bindQueue(queueName, delayExchange);
+        };
+        try {
             try {
-                const msg = {
-                    messageId: uuidv7(),
-                    type: 'publishAsync',
-                    sourceAddress: `rabbitmq://${this.brokerConfig.brokerInfo.host}/${replyQueueName}`, // TODO
-                    destinationAddress: `rabbitmq://${this.brokerConfig.brokerInfo.host}/queue/${endpoint ?? ''}`,
-                    messageType: `message:${this.brokerConfig.brokerName}:${message.constructor.name}`,
-                    message: message,
-                    sentTime: new Date().toString(),
-                    expirationTime: addMilliseconds(new Date(), timeout).toString(),
-                    headers: {
-                        saga: ctx?.Saga,
-                    },
-                } as IMessage<any>;
-
-                channelTemp.publish('', endpoint, Buffer.from(JSON.stringify(msg), 'utf-8'), {
-                    replyTo: replyQueueName,
-                    correlationId: correlationId,
-                    persistent: true,
-                });
-
-                Logger.debug(
-                    `[x] Sent msg to ${endpoint} with MSG ${JSON.stringify(msg)}, replyTo ${replyQueueName}`,
-                );
+                await declareAndBind();
             } catch (error) {
-                clearTimeout(timer);
-                reject(error);
-                channelTemp
-                    .cancel(consumeResult.consumerTag)
-                    .catch((e) => console.error('Failed to cancel consumer', e));
-            } finally {
+                // The shared topology channel may have been closed by another declaration's refusal: then this
+                // error carries no broker reply code of its own, and a second try on a fresh channel works.
+                if (typeof error?.code === 'number') throw error;
+                Logger.warn(`[RabbitMQ] Setting up redelivery for queue '${queueName}' failed (${error.message}); trying once more`);
+                await declareAndBind();
             }
-        });
+            this.queueRedeliveryEnabled.set(queueName, true);
+            Logger.log(`[RabbitMQ] ✓ Redelivery enabled for queue '${queueName}'`);
+        } catch (error) {
+            this.queueRedeliveryEnabled.set(queueName, false);
+            Logger.error(`[RabbitMQ] ✗ Could not set up redelivery for queue '${queueName}': ${error.message}. Redelivery is DISABLED.`);
+        }
+    }
+
+    private requireManager(): ConnectionManager {
+        if (!this.manager) throw new Error('[RabbitMQ] Broker is not configured');
+        return this.manager;
+    }
+
+    private requirePublisher(): Publisher {
+        if (!this.publisher) throw new Error('[RabbitMQ] Broker is not configured');
+        return this.publisher;
+    }
+
+    private getSystemInfo() {
+        return {
+            machineName: os.hostname(),
+            processName: process.title,
+            processId: process.pid,
+            frameworkVersion: process.version,
+            operatingSystemVersion: `${os.type()} ${os.release()}`,
+        };
+    }
+
+    protected getNameAddClusterPrefix(name: string) {
+        return `${this.brokerConfig.brokerName ? `${this.brokerConfig.brokerName}:` : ''}${name}`;
     }
 }

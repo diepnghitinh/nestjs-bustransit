@@ -36,6 +36,35 @@ npm install nestjs-bustransit uuid
 yarn add nestjs-bustransit uuid
 ```
 
+## Reliability
+
+- **Await every publish.** `Publish` resolves once RabbitMQ confirms the message and rejects when the broker refuses it or does not confirm within `publishTimeoutMs`. When the broker refuses a publish it closes the channel, so other publishes in flight on that channel at that moment also reject; retry them. A publish made while the connection is down first waits up to `readyTimeoutMs` for it, then up to `publishTimeoutMs` for the confirm. A rejected publish may still have reached the broker (for example when the connection dropped before the confirm arrived), so retrying it can deliver the message twice.
+- **Order is kept only between awaited publishes.** Publishes that run at the same time (for example in `Promise.all`) can reach the broker in a different order than they were called, because the first publish to an exchange checks that it exists first. When order matters, await each `Publish` before the next.
+- **Publishers make sure their exchange exists.** An existing exchange is used as it is. A missing one is created (fanout, durable), so publishing a message type before its consumer is deployed does not break other publishes. The message itself is dropped and logged as `Unroutable message`; `Publish` still resolves.
+- **Failures stay local.** A channel the broker closes is reopened on next use. Each consumer restarts on its own. A lost connection reconnects every `reconnectDelayMs`.
+- **At-least-once delivery.** A message in progress when its channel dies is delivered again. Make consumers idempotent.
+- **Deleted topology comes back.** A consuming process declares its exchanges and bindings again every `topologyRefreshMs` (60 s by default), on its own short-lived channels. An exchange that exists is used as it is, whatever its settings; only a missing one is created. If an operator deletes an exchange or a binding, until the next refresh: the first publish to a deleted exchange (and any publish in flight on the same channel) may reject with the broker's 404, later ones resolve but are unroutable and dropped (logged as `Unroutable message`), and delayed messages that come due are lost if the delay exchange or its binding is gone. Do not delete exchanges or bindings of a running system. The refresh cannot be disabled; `topologyRefreshMs` accepts at most 2147483647 (about 24.8 days), and every other `reliability` value has the same maximum.
+- **Failed messages.** After its in-place retries, a failed message goes to delayed redelivery or to `<queue>_error`. While the bus is shutting down it goes back to its queue instead, after `requeueDelayMs` and within the drain, because the failure is usually the shutdown itself (for example a `Send` whose target consumer already stopped); it is delivered again after the restart.
+- **Shutdown.** Call `app.enableShutdownHooks()`. Shutdown stops consuming, waits up to `shutdownTimeoutMs` for messages in progress, in `beforeApplicationShutdown`, and closes the connection in `onApplicationShutdown`, so publishing keeps working while the app shuts down. Release your own resources (database connections) in `onApplicationShutdown`; by then the bus has stopped taking messages. Handlers still running after `shutdownTimeoutMs` may fail when those resources go away; their messages go back to the queue and are delivered again. The drain runs once, so shutdown takes at most `shutdownTimeoutMs` plus about 2 s to close the connection, even when the broker has stopped answering. If the broker cannot be reached when shutdown starts, closing waits at most 2 s for a connection attempt still in progress; each attempt gives up after `readyTimeoutMs`. Keep `shutdownTimeoutMs` below your container's stop grace period. A message that fails during the drain is handed back to its queue after `requeueDelayMs` (still within the drain), not parked. `BusTransitService.stopConsuming()` is final: the bus never consumes again after it, so call it only to shut down.
+
+```ts
+x.UsingRabbitMq(configService.get('APP_NAME'), (context, cfg) => {
+    cfg.UseReliability({ shutdownTimeoutMs: 35000 }); // ESB containers get 40 s to stop
+    // ...
+});
+```
+
+Health check:
+
+```ts
+@Get('health/bus')
+health() {
+    const health = this.busTransitService.getHealth();
+    if (!health.connected) throw new ServiceUnavailableException(health);
+    return health;
+}
+```
+
 ## Roadmap
 - [x] RabbitMq Broker
 - [x] Retry Level 1 (Immediate, Interval, Intervals, Exponential)
@@ -148,6 +177,22 @@ Activity-based workflow orchestration inspired by [MassTransit's Routing Slips](
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
+
+Run `npm run typecheck` and `npm test`. The integration tests (`npm run test:integration`) need a RabbitMQ broker in `RABBITMQ_URL` and its management API in `RABBITMQ_MANAGEMENT_URL`; they are skipped without one. The delayed-redelivery tests need a second broker with the [delayed-message plugin](https://github.com/rabbitmq/rabbitmq-delayed-message-exchange) in `RABBITMQ_DELAYED_URL` and `RABBITMQ_DELAYED_MANAGEMENT_URL`, for example:
+
+```bash
+curl -fsSLO https://github.com/rabbitmq/rabbitmq-delayed-message-exchange/releases/download/v3.13.0/rabbitmq_delayed_message_exchange-3.13.0.ez
+echo '[rabbitmq_management,rabbitmq_delayed_message_exchange].' > enabled_plugins
+docker run -d --name bt-delayed -p 5673:5672 -p 15673:15672 \
+  -e RABBITMQ_DEFAULT_USER=bustransit -e RABBITMQ_DEFAULT_PASS=bustransit \
+  -v "${PWD}/rabbitmq_delayed_message_exchange-3.13.0.ez:/opt/rabbitmq/plugins/rabbitmq_delayed_message_exchange-3.13.0.ez:ro" \
+  -v "${PWD}/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro" \
+  rabbitmq:3.13-management
+until curl -sf -u bustransit:bustransit http://localhost:15673/api/overview > /dev/null; do sleep 2; done
+RABBITMQ_DELAYED_URL=amqp://bustransit:bustransit@localhost:5673 \
+RABBITMQ_DELAYED_MANAGEMENT_URL=http://bustransit:bustransit@localhost:15673 \
+npm run test:integration
+```
 
 ## License
 

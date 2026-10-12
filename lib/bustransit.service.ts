@@ -1,3 +1,4 @@
+import {BusTransitHealth} from "./interfaces/brokers/bustransit-health.interface";
 import {Injectable, Inject, Logger} from '@nestjs/common';
 import {
   BUSTRANSIT_CONSUMERS,
@@ -39,11 +40,23 @@ export class BusTransitService {
     return this.broker;
   }
 
-  startBroker() {
-    this.broker?.start();
+  startBroker(): Promise<void> {
+    return this.broker?.start() ?? Promise.resolve();
   }
 
-  close() {
-    this.broker.close();
+  /**
+   * Stops taking messages and waits for those in progress (up to shutdownTimeoutMs). Final: the bus does not consume
+   * again after it, even after a reconnect. Meant for shutdown; publishing keeps working until close().
+   */
+  async stopConsuming(): Promise<void> {
+    await this.broker?.stopConsuming();
+  }
+
+  async close(): Promise<void> {
+    await this.broker?.close();
+  }
+
+  getHealth(): BusTransitHealth {
+    return this.broker?.health() ?? { connected: false, blocked: false, consumers: {} };
   }
 }

@@ -19,3 +19,7 @@ export * from './constants/saga-persistence.constants';
 export * from './persistence/serializers/json-saga.serializer';
 export * from './persistence/repositories/in-memory-saga.repository';
 export * from './persistence/saga-persistence.module';
+
+// Transport reliability
+export * from './interfaces/brokers/bustransit-health.interface';
+export type { ReliabilityOptions } from './factories/brokers/rabbitmq/reliability-options';
