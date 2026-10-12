@@ -8,8 +8,8 @@ export class AppController {
   ) {}
 
   @Get('test-consumer')
-  producerPushText(): string {
-    this.appService.testConsumer();
+  async producerPushText(): Promise<string> {
+    await this.appService.testConsumer();
     return "ok";
   }
 

@@ -16,10 +16,10 @@ export class AppService {
   ) {
   }
 
-  testConsumer(): void {
+  async testConsumer(): Promise<void> {
       let msg = new OrderMessage();
       msg.Text = 'hello world';
-      this.publishEndpoint.Publish<OrderMessage>(msg);
+      await this.publishEndpoint.Publish<OrderMessage>(msg);
   }
 
   async testSaga(): Promise<any> {

@@ -3,6 +3,7 @@ import {IBusTransitBrokerInterface} from "../../interfaces/brokers/bustransit-br
 import {IBusTransitBrokerOptions} from "../../interfaces/brokers/bustransit-broker.options.interface";
 import {BusTransitStateMachine} from "../saga.bustransit.state-machine";
 import {BehaviorContext} from "../behavior.context";
+import {BusTransitHealth} from "../../interfaces/brokers/bustransit-health.interface";
 
 export class BusTransitBrokerBaseFactory implements IBusTransitBrokerInterface {
 
@@ -37,18 +38,23 @@ export class BusTransitBrokerBaseFactory implements IBusTransitBrokerInterface {
         return this.consumers;
     };
 
-    public start() {}
+    public async start(): Promise<void> {}
     public startAllConsumer() {}
 
-    public close() {
+    public async stopConsuming(): Promise<void> {}
+
+    public async close(): Promise<void> {}
+
+    public health(): BusTransitHealth {
+        return { connected: false, blocked: false, consumers: {} };
     }
 
     // Message functions
-    async publish<TMessage>(message: TMessage, ctx: BehaviorContext<any, TMessage>): Promise<any> {
+    async publish<TMessage>(message: TMessage, ctx?: BehaviorContext<any, TMessage>): Promise<void> {
         throw Error('Function implement')
     }
 
-    async publishAsync<TMessage>(message: TMessage, ctx: BehaviorContext<any, TMessage>): Promise<any> {
+    async publishAsync<TMessage>(message: TMessage, ctx?: BehaviorContext<any, TMessage>): Promise<any> {
         throw Error('Function implement')
     }
 }

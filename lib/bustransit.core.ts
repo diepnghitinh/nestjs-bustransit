@@ -1,6 +1,7 @@
 import {
     DynamicModule,
     Module,
+    BeforeApplicationShutdown,
     OnApplicationShutdown,
     OnModuleDestroy,
     Global,
@@ -28,7 +29,7 @@ import { ExternalContextCreator } from '@nestjs/core/helpers/external-context-cr
         BusTransitService
     ],
 })
-export class BusTransitCoreModule implements OnApplicationBootstrap, OnApplicationShutdown {
+export class BusTransitCoreModule implements OnApplicationBootstrap, BeforeApplicationShutdown, OnApplicationShutdown {
 
     constructor(
         @Inject(BUSTRANSIT_MODULE_OPTIONS) private readonly options: BusTransitModuleOptions_Factory,
@@ -106,11 +107,18 @@ export class BusTransitCoreModule implements OnApplicationBootstrap, OnApplicati
         };
     }
 
-    async onApplicationShutdown() : Promise<void> {
-        this.busTransitService.close();
+    /** Stops consuming and drains before user modules release their own resources in onApplicationShutdown. */
+    async beforeApplicationShutdown(): Promise<void> {
+        await this.busTransitService.stopConsuming();
     }
 
-    onApplicationBootstrap(): any {
-        this.busTransitService.startBroker();
+    /** Closes the connection last, so requests the HTTP server is still finishing can publish. */
+    async onApplicationShutdown(): Promise<void> {
+        await this.busTransitService.close();
+    }
+
+    onApplicationBootstrap(): void {
+        // Do not block app boot on the broker: publishes wait for the connection (readyTimeoutMs).
+        void this.busTransitService.startBroker();
     }
 }
