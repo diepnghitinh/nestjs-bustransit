@@ -1,6 +1,13 @@
 # Changelog
 
-## [0.3.2] - 2026-02-11
+## [Unreleased]
+- Publisher confirms: `UsePublisherConfirms(timeoutMs)` makes `Publish()` wait for the broker ack.
+- Publish retry: `UsePublishRetry(r => ...)` retries nack, confirm timeout and closed-channel failures, re-sending the same `messageId`.
+- `Publish()` accepts per-call `{ confirm, confirmTimeoutMs, retry }` and now returns `Promise<void>`.
+- New errors: `PublishNackError`, `PublishConfirmTimeoutError`, `PublishChannelUnavailableError`.
+- Default behaviour unchanged (fire-and-forget). See `docs/PUBLISHER_CONFIRMS.md`.
+
+## [0.3.3] - 2026-02-11
 Fix saga on multi node
 
 ## [0.3.1] - 2025-12-24

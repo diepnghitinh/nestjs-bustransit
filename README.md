@@ -10,6 +10,7 @@ A powerful NestJS library for building reliable distributed systems with **Rabbi
 - **[📕 Saga Compensation Guide](./docs/COMPENSATION.md)** - Event-driven state machine compensation
 - **[💾 Saga Persistence Guide](./docs/SAGA_PERSISTENCE.md)** - Production-ready state persistence
 - **[⚙️ Retry Strategies](./docs/RETRY_STRATEGIES.md)** - Handle failures gracefully
+- **[✅ Publisher Confirms & Publish Retry](./docs/PUBLISHER_CONFIRMS.md)** - Reliable publish with broker ack and retry
 - **[👨‍💻 Code Examples](./example/src/infrastructure/messaging/)** - Full working examples
 
 ## Why Use This Library?

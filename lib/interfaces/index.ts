@@ -1,4 +1,5 @@
 export * from './publish-endpoint.interface';
+export * from './publisher-options.interface';
 export * from './saga.consumer.interface';
 export * from './consumer.interface';
 export * from './message.context.interface';
