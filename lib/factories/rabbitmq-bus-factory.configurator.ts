@@ -6,6 +6,8 @@ import {IBusTransitBrokerOptions} from "../interfaces/brokers/bustransit-broker.
 import {IRabbitmqHostSettings} from "../interfaces/rabbitmq-host.settings.interface";
 import {IRabbitMqBusFactoryConfigurator} from "../interfaces/rabbitmq-bus-factory.configurator.interface";
 import {IRabbitMqReceiveEndpointConfigurator} from "../interfaces/rabbitmq-receive-endpoint.configuator.interface";
+import {IRetryConfigurator} from "../interfaces/retry.configurator.interface";
+import {RetryConfigurator, RetryLevel} from "./retry.configurator";
 
 export class RabbitMqBusFactoryConfigurator implements IRabbitMqBusFactoryConfigurator
 {
@@ -43,6 +45,23 @@ export class RabbitMqBusFactoryConfigurator implements IRabbitMqBusFactoryConfig
     }
 
     Publish<T>() {
+    }
+
+    UsePublisherConfirms(timeoutMs: number = 5000): void {
+        this.options.publisher = {
+            ...this.options.publisher,
+            confirm: true,
+            confirmTimeoutMs: timeoutMs,
+        };
+    }
+
+    UsePublishRetry(c: (c: IRetryConfigurator) => void): void {
+        const retryConfigurator = new RetryConfigurator(RetryLevel.retry);
+        c(retryConfigurator);
+        this.options.publisher = {
+            ...this.options.publisher,
+            retry: retryConfigurator.getRetryValue(),
+        };
     }
 
     Send<T>() {

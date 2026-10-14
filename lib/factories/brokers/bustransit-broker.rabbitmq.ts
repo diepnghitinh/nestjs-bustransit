@@ -7,6 +7,7 @@ import { ConsumerConfigurator } from '../consumer.configurator';
 import {
     catchError,
     defer,
+    from,
     delay,
     delayWhen,
     every,
@@ -39,6 +40,8 @@ import { BehaviorContext } from '../behavior.context';
 import { SagaStateMachineInstance } from '../saga.state-machine-instance';
 import { IMessage } from '../../interfaces/message.interface';
 import { IPublishEndpoint } from '../../interfaces';
+import { IPublishOptions } from '../../interfaces/publisher-options.interface';
+import { PublishChannelUnavailableError, PublishConfirmTimeoutError, PublishNackError } from '../publish.errors';
 
 @Injectable()
 export class BusTransitBrokerRabbitMqFactory extends BusTransitBrokerBaseFactory {
@@ -65,7 +68,7 @@ export class BusTransitBrokerRabbitMqFactory extends BusTransitBrokerBaseFactory
                 clientProperties: { connection_name: this.brokerConfig.brokerName },
             });
 
-            await this.createChannel(this.channelProducer, {});
+            await this.createProducerChannel();
             await this.checkDelayedMessagePlugin();
             const exchangeCreated = await this.startAllConsumer();
 
@@ -83,6 +86,24 @@ export class BusTransitBrokerRabbitMqFactory extends BusTransitBrokerBaseFactory
 
     private getProducerChannel(): amqp.Channel {
         return this.channelList[this.channelProducer];
+    }
+
+    /**
+     * The producer channel is always a confirm channel: without a callback it behaves like a plain
+     * channel, so publisher confirms can be switched on per bus or per message without reconnecting.
+     */
+    protected async createProducerChannel() {
+        const channel = await this.connection.createConfirmChannel();
+
+        channel.on('error', (err) => {
+            Logger.error(`[RabbitMQ] Channel error for '${this.channelProducer}': ${err.message}`);
+        });
+
+        channel.on('close', () => {
+            Logger.warn(`[RabbitMQ] Channel closed for '${this.channelProducer}'`);
+        });
+
+        this.channelList[this.channelProducer] = channel;
     }
 
     /**
@@ -158,11 +179,6 @@ export class BusTransitBrokerRabbitMqFactory extends BusTransitBrokerBaseFactory
     async createAllExchange(exchangeCreatedFromConsumers) {
         Logger.debug(`Created All Exchange`);
         const exchanges = [];
-
-
-
-        console.log('classMessageToEndpoint: ');
-        console.log(this.classMessageToEndpoint);
 
         for (const [key, consumerClass] of Object.entries(this.consumers)) {
             // Extract actual class if it's a saga consumer data object
@@ -615,7 +631,7 @@ export class BusTransitBrokerRabbitMqFactory extends BusTransitBrokerBaseFactory
     }
 
     // Message functions
-    async publish<TMessage>(message: TMessage, ctx?: BehaviorContext<any, TMessage>) {
+    async publish<TMessage>(message: TMessage, ctx?: BehaviorContext<any, TMessage>, options?: IPublishOptions) {
         // Trường hợp Message không có exchange trong process thì push thẳng vào tên exchange ??
         const exchange = this.getNameAddClusterPrefix(
             this.classMessageToExchange[message.constructor.name] ??
@@ -635,14 +651,64 @@ export class BusTransitBrokerRabbitMqFactory extends BusTransitBrokerBaseFactory
                 saga: ctx?.Saga,
             },
         } as IMessage<any>;
-        (await this.getProducerChannel()).publish(
-            exchange,
-            '',
-            Buffer.from(JSON.stringify(msg), 'utf-8'),
-            {
-                persistent: true,
-            },
-        );
+        const content = Buffer.from(JSON.stringify(msg), 'utf-8');
+
+        const confirm = options?.confirm ?? this.brokerConfig.publisher?.confirm ?? false;
+        const timeoutMs = options?.confirmTimeoutMs ?? this.brokerConfig.publisher?.confirmTimeoutMs ?? 5000;
+        const attempt = () => this.publishOnce(exchange, content, msg.messageId, confirm, timeoutMs);
+
+        const retryPolicy = options?.retry === false ? undefined : this.brokerConfig.publisher?.retry;
+        if (!retryPolicy) {
+            await attempt();
+            return;
+        }
+
+        // Every attempt re-sends the same messageId so consumers can de-duplicate.
+        await lastValueFrom(defer(() => from(attempt())).pipe(retryPolicy.pipe));
+    }
+
+    private publishOnce(
+        exchange: string,
+        content: Buffer,
+        messageId: string,
+        confirm: boolean,
+        timeoutMs: number,
+    ): Promise<void> {
+        return new Promise<void>((resolve, reject) => {
+            const channel = this.getProducerChannel() as amqp.ConfirmChannel;
+            if (!channel) {
+                reject(new PublishChannelUnavailableError());
+                return;
+            }
+
+            const properties = { persistent: true, messageId };
+            let timer: NodeJS.Timeout | undefined;
+            try {
+                if (!confirm) {
+                    channel.publish(exchange, '', content, properties);
+                    resolve();
+                    return;
+                }
+
+                timer = setTimeout(
+                    () => reject(new PublishConfirmTimeoutError(exchange, messageId, timeoutMs)),
+                    timeoutMs,
+                );
+                channel.publish(exchange, '', content, properties, (err) => {
+                    clearTimeout(timer);
+                    if (err) {
+                        // amqplib reports a broker nack as Error('message nacked'); other errors (channel closed) pass through
+                        reject(err.message === 'message nacked' ? new PublishNackError(exchange, messageId) : err);
+                    } else {
+                        resolve();
+                    }
+                });
+            } catch (e) {
+                // e.g. IllegalOperationError when the channel is closed during a reconnect
+                clearTimeout(timer);
+                reject(e);
+            }
+        });
     }
 
     /* Bản chất rabbitmq không thể async khi publish được, sử dụng sendQueue instead */

@@ -1,4 +1,5 @@
 export * from './consumer';
+export * from './publish.errors';
 export * from './saga.bustransit.state-machine';
 export * from './saga.state-machine-instance';
 export * from './saga.event';

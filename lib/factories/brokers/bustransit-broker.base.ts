@@ -3,6 +3,7 @@ import {IBusTransitBrokerInterface} from "../../interfaces/brokers/bustransit-br
 import {IBusTransitBrokerOptions} from "../../interfaces/brokers/bustransit-broker.options.interface";
 import {BusTransitStateMachine} from "../saga.bustransit.state-machine";
 import {BehaviorContext} from "../behavior.context";
+import {IPublishOptions} from "../../interfaces/publisher-options.interface";
 
 export class BusTransitBrokerBaseFactory implements IBusTransitBrokerInterface {
 
@@ -44,7 +45,7 @@ export class BusTransitBrokerBaseFactory implements IBusTransitBrokerInterface {
     }
 
     // Message functions
-    async publish<TMessage>(message: TMessage, ctx: BehaviorContext<any, TMessage>): Promise<any> {
+    async publish<TMessage>(message: TMessage, ctx: BehaviorContext<any, TMessage>, options?: IPublishOptions): Promise<any> {
         throw Error('Function implement')
     }
 
